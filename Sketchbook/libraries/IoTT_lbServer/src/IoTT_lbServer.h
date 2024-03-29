@@ -23,13 +23,13 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define IoTT_lbServer_h
 
 #include <stdlib.h>
-#include <arduino.h>
-#include <Math.h>
+#include <Arduino.h>
+#include <math.h>
 #include <inttypes.h>
 #include <WiFi.h>
 #include <IoTT_CommDef.h>
 #include <IoTT_DigitraxBuffers.h>
-#include <ArduinoJSON.h>
+#include <ArduinoJson.h>
 #include <AsyncTCP.h>
 #include <ESPmDNS.h>
 #include <vector>

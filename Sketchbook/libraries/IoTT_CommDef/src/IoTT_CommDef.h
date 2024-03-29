@@ -1,7 +1,7 @@
 #ifndef IoTT_CommDef_h
 #define IoTT_CommDef_h
 
-#include <arduino.h>
+#include <Arduino.h>
 #include <inttypes.h>
 #include <AsyncTCP.h>
 #include <ESPAsyncWebServer.h>

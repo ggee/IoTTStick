@@ -23,8 +23,8 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 #define IoTT_MQTTESP32_h
 
 #include <stdlib.h>
-#include <arduino.h>
-#include <Math.h>
+#include <Arduino.h>
+#include <math.h>
 #include <inttypes.h>
 #include <WiFi.h>
 #include <IoTT_CommDef.h>
