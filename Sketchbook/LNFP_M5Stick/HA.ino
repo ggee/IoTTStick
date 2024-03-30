@@ -32,6 +32,7 @@ void publishIpConfigToHa()
   deviceI["sw"] = myStatusMsg;
   sprintf(cUrl, "http://%s", WiFi.localIP().toString().c_str());
   deviceI["cu"] = cUrl;
+  deviceI["mdl"] = useHat.devName;
   serializeJson(doc, myMqttMsg);
 
   // Pubish IP sensor
