@@ -93,16 +93,19 @@ function setDisplayOptions()
 	setVisibility([4,5,6].indexOf(configData[2].InterfaceIndex) >= 0, configLNOptBox);
 	setVisibility(([4,5,6].indexOf(configData[2].InterfaceIndex) >= 0) && ([5].indexOf(configData[2].HatIndex) < 0), configFCBox);
 //	setVisibility(([4].indexOf(configData[2].InterfaceIndex) >= 0) && ([5].indexOf(configData[2].HatIndex) < 0), configSubnetBox);
+	setVisibility(([4,5,6].indexOf(configData[2].InterfaceIndex) >= 0), configRefreshBox);
+
 
 	for (var i = 0; i < configData[2].ALMTypeList.length; i++)
 	{
 		var almId = "cbUseALM_" + i;
 		if (document.getElementById(almId))
 		{
-			var isVisible = configData[2].ALMTypeList[i].InterfaceList.indexOf(configData[2].InterfaceTypeList[configData[2].InterfaceIndex].IntfId) >= 0;
+			var isVisible = (configData[2].ALMTypeList[i].InterfaceList.indexOf(configData[2].InterfaceTypeList[configData[2].InterfaceIndex].IntfId)) >= 0;
+			//note: InterfaceList settings are overridden by the ones in pagestitch
 			if (!isVisible)
 			{
-				clearElement(configData[2].ALMIndex, configData[2].ALMTypeList[i].ALMId);
+				configData[2].ALMIndex = clearElement(configData[2].ALMIndex, configData[2].ALMTypeList[i].ALMId);
 				document.getElementById(almId).checked = false;
 			}
 			setVisibility(isVisible, document.getElementById(almId).parentElement);
@@ -177,6 +180,7 @@ function setElement(inArray, e)
 {
 	if (inArray.indexOf(e) < 0)
 		inArray.push(e);
+	return inArray;
 }
 
 function clearElement(inArray, e)
@@ -184,6 +188,7 @@ function clearElement(inArray, e)
 	var elPos = inArray.indexOf(e);
 	if (elPos >= 0)
 		inArray.splice(elPos,1);
+	return inArray;
 }
 
 function setUseALM(sender)
@@ -200,7 +205,7 @@ function setUseALM(sender)
 	{
 //		console.log(oldCommMode, ALMId, ALMIndex);
 		if ((configData[2].InterfaceTypeList[oldCommMode].Type >= configData[2].ALMTypeList[ALMIndex].Type))
-			setElement(configData[2].ALMIndex, ALMId);
+			configData[2].ALMIndex = setElement(configData[2].ALMIndex, ALMId);
 		else
 		{
 			alert("This Logic Module does not work with the selected command source");
@@ -208,7 +213,7 @@ function setUseALM(sender)
 		}
 	}
 	else
-		clearElement(configData[2].ALMIndex, ALMId);
+		configData[2].ALMIndex = clearElement(configData[2].ALMIndex, ALMId);
 //	console.log(configData[2].ALMIndex);
 }
 
@@ -324,6 +329,12 @@ function setFastClock(sender)
 		configData[workCfg].broadcastFCRate = verifyNumber(sender.value, configData[workCfg].broadcastFCRate); 
 }
 
+function setFctRefresh(sender)
+{
+	if (sender.id == "cbUseFctRefresh")
+		configData[workCfg].refreshFct = sender.checked;
+}
+
 //function setSubnet(sender)
 //{
 //	configData[2].subnetMode = sender.checked ? 1:0;
@@ -352,6 +363,8 @@ function constructPageContent(contentTab)
 		tempObj = createEmptyDiv(mainScrollBox, "div", "tile-1", "configFCBox");
 			createCheckbox(tempObj, "tile-1_4", "Support FastClock", "cbUseFastClock", "setFastClock(this)");
 			createTextInput(tempObj, "tile-1_4", "Refresh Rate [Sec.]:", "75", "fcrefresh", "setFastClock(this)");
+		tempObj = createEmptyDiv(mainScrollBox, "div", "tile-1", "configRefreshBox");
+			createCheckbox(tempObj, "tile-1_4", "Refresh F9-F28", "cbUseFctRefresh", "setFctRefresh(this)");
 		
 		createPageTitle(mainScrollBox, "div", "tile-1", "", "h2", "Communication Servers");
 		tempObj = createEmptyDiv(mainScrollBox, "div", "tile-1", "ServerBox");
@@ -427,6 +440,7 @@ function loadHatOptions(jsonData)
 }
 function loadInterfaceOptions(jsonData)
 {
+//	console.log(jsonData);
 	var optionsArray = [];
 	for (var i = 0; i < jsonData.InterfaceTypeList.length; i++)
 		optionsArray.push(jsonData.InterfaceTypeList[i].Name);
@@ -445,9 +459,12 @@ function loadALMOptions(jsonData)
 	{
 		if ((i & 0x01) == 0)
 			currDispBox = createEmptyDiv(ALMBox, "div", "tile-1", "");
-		createCheckbox(currDispBox, "tile-1_4", jsonData.ALMTypeList[i].Name, "cbUseALM_" + i.toString(), "setUseALM(this)");
-		writeCBInputField("cbUseALM_" + i.toString(), jsonData.ALMIndex.indexOf(jsonData.ALMTypeList[i].ALMId) >=0);
-		document.getElementById("cbUseALM_" + i.toString()).setAttribute("ALMId", jsonData.ALMTypeList[i].ALMId);
+//		if (jsonData.ALMTypeList[i].InterfaceList.indexOf(jsonData.InterfaceIndex) >= 0)
+		{
+			createCheckbox(currDispBox, "tile-1_4", jsonData.ALMTypeList[i].Name, "cbUseALM_" + i.toString(), "setUseALM(this)");
+			writeCBInputField("cbUseALM_" + i.toString(), jsonData.ALMIndex.indexOf(jsonData.ALMTypeList[i].ALMId) >= 0);
+			document.getElementById("cbUseALM_" + i.toString()).setAttribute("ALMId", jsonData.ALMTypeList[i].ALMId);
+		}	
 	}
 }
 
@@ -505,7 +522,7 @@ function loadDataFields(jsonData)
 		writeCBInputField("cbUseFastClock", true);
 		writeInputField("fcrefresh", 75);
 	}
-	
+	writeCBInputField("cbUseFctRefresh", jsonData.refreshFct);
 	writeCBInputField("cbUseNTP", jsonData.useNTP);
 	setVisibility(jsonData.useNTP, configNTPBox);
 	writeInputField("ntpserverurl", jsonData.ntpConfig.NTPServer);

@@ -1,3 +1,4 @@
+
 //callbackLocoNetMessage is called everytime a LocoNet message is received
 //it should decode valid messages, update any status buffer and call event handlers as needed
 //LocoNet messages coming in from Communication module side, e.g. LN Driver, MQTT, or Gateway
@@ -33,7 +34,7 @@ void processLNError(lnReceiveBuffer * newData)
 //   Serial.printf("LN Msg %i ReqID %2X with %i bytes requested %i: ", newData->errorFlags, newData->requestID, newData->lnMsgSize, newData->reqRecTime); 
 //   for (int i=0; i<newData->lnMsgSize; i++)
 //     Serial.printf("0x%02X ", newData->lnData[i]);
-//   Serial.println();requestID
+//   Serial.println();//requestID
 
   if ((newData->errorFlags & errorCollision) > 0)
     Serial.println("LocoNet Error: LocoNet Collision detected");
@@ -55,34 +56,48 @@ void processLNError(lnReceiveBuffer * newData)
 
 void processLNValidMsg(lnReceiveBuffer * newData)
 {
-//   Serial.printf("LN Msg %i ReqID %2x with %i bytes requested %i: ", newData->errorFlags, newData->requestID, newData->lnMsgSize, newData->reqRecTime); 
-//   for (int i=0; i<newData->lnMsgSize; i++)
-//     Serial.printf("0x%02X ", newData->lnData[i]);
-//   Serial.println();
+//  Serial.printf("LN Msg %i ReqID %2x with %i bytes requested %i: ", newData->errorFlags, newData->requestID, newData->lnMsgSize, newData->reqRecTime); 
+//  for (int i=0; i<newData->lnMsgSize; i++)
+//    Serial.printf("0x%02X ", newData->lnData[i]);
+//  Serial.println();
+  if (lnMQTTClient)
+    if ((newData->requestID & fromMQTTGW) == 0) return; //we are a client and this message is not from the gateway
   digitraxBuffer->processLocoNetMsg(newData); //send it to DigitraxBuffers
   processDataToWebClient("LN", newData);
   if (useM5Viewer == 1)
     processLNtoM5(newData);
   if (usbSerial)
-    if (usbSerial->getMsgType() != DCCEx)
+  {
+    switch (usbSerial->getMsgType())
     {
-//      Serial.println("USB");
-      usbSerial->lnWriteMsg(*newData);
+      case LocoNet:
+//        Serial.println("Loconet USB");
+        usbSerial->lnWriteMsg(*newData);
+        break;
+      case DCCEx:
+//        usbSerial->lnWriteMsg(*newData);
+        break;
+      case DCCBoost:
+//        Serial.println("Booster");
+        usbSerial->lnWriteMsg(*newData);
+        break;
+      default: break;       
     }
+  }
 //  if (secElHandlerList) secElHandlerList->processLocoNetMsg(newData); //do not call this before buffer processing as it will read new buffer values
   if (lbServer)
     lbServer->lnWriteMsg(newData);
-  if ((lnMQTTServer) && ((newData->requestID & fromMQTTGW) == 0)) //not coming from MQTT Gateway
+  if ((lnMQTTServer) && ((newData->requestID & fromMQTTGW) == 0)) //not coming from MQTT Gateway (ourself)
   {
 //    Serial.println("MQTT Callback");
     lnMQTTServer->lnWriteMsg(newData);
   }
-  if (wiServer)
-    wiServer->lnWriteMsg(newData);
+  if (wiThServer)
+    wiThServer->lnWriteMsg(newData);
 //   Serial.println("Done");
   if (lnSubnet && ((newData->requestID & fromLNSubnet) != fromLNSubnet)) //not originally from the subnet
   {
-    Serial.println("Send to Subnet");
+//    Serial.println("Send to Subnet");
     newData->requestID = random(0xFF);
     lnSubnet->lnWriteMsg(newData);
   }

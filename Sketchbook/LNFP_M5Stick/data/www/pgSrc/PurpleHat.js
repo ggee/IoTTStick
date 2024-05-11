@@ -9,9 +9,11 @@ var wayPoints = [];
 var drawPoints = [];
 
 var trackerDisp = 0x7F;
+var trimReserve = 0;
 
 var tabSetup;
 var tabMeasurement;
+var tabAnalysis;
 var tabSpeedMatch;
 var tabGPS;
 var tabProgrammer;
@@ -19,7 +21,20 @@ var cvTableNative;
 var cvTableJMRI;
 var techSpeedDiv;
 var speedTableDiv;
+var progDispPane;
 
+var colorTableSpeedDisp; 
+var colorTableAngleDisp; 
+var colorTableAnalysis;
+var colorTableThrottle;
+var colorTableProfile;
+var colorTableTable;
+
+var speedDistTable;
+var elevPitchTable;
+
+var analysisBuffer = [];
+var analysisIndex = 0;
 
 var fwTrim = 0;
 var bwTrim = 0;
@@ -28,6 +43,30 @@ var trackRecFile = "";
 var trackRecMode = false;
 
 var dimOptions = ["Metric","Imperial"];
+var sizeOptions = ["100%","200%","300%","400%","500%"];
+var relDist = 0; //relative distance, always metric
+var wheelSizeDlg = null;
+var progDlg = null;
+var progStatus = 1; //0: busy 1: done with success 2: done with error
+var progRetCode = 0; //0: busy 1: accepted, wait for answer 0x40: accepted blind 0x7F: task not implemented
+var progFailCtr = 0;
+/*
+var progStatus = 1; //0: busy 1: done with success 2: done with error
+var progRetCode = 0; //0: busy 
+* 							1: accepted, wait for answer 
+* 							2: timeout error 
+* 							3: success 
+* 							4: Prog track found empty
+* 							5: No Ack Pulse
+* 							6: Value not found
+* 							7: Task aborted by user
+* 							0x40: accepted blind 
+* 							0x7F: task not implemented
+var progLastCommand;
+*/
+var progLastCommand;
+
+var testDist = 0;
 
 var testPoints = [0,0,0, 1,0,0, 0.5,0.5,0, 1,0,0, -0.5,-0.5,0, 1,0,0];
 var dispSize = [2,2,2];
@@ -37,6 +76,8 @@ var canvasElementSpeed;
 var canvasElementGrade;
 var canvasElementRadius;
 var canvasElementGPS;
+var canvasElementAnalysis;
+//var canvasElementSpeedVerify;
 
 var dispBoundaries = [-1000, 1000, -1000, 1000, -1000, 1000]; //minX, maxX, minY, maxY, minZ, maxZ
 var dispOrigin = [0,0,0];
@@ -48,6 +89,7 @@ var	locoAddr = -1;
 var locoAddrValid = false;
 
 jsonFileVersion = "1.0.1";
+
 
 function upgradeJSONVersion(jsonData)
 {
@@ -73,30 +115,37 @@ function setButtonStatus()
 {
 //	console.log("Btn Stat", configData[nodeCfg].InterfaceIndex, configData[workCfg].InterfaceIndex, thisIntfID);
 	setVisibility([3, 12].indexOf(thisIntfID) >= 0, document.getElementById("btnAssign"));
-	setVisibility([3, 12,17].indexOf(thisIntfID) >= 0, document.getElementById("dccaddr").parentElement);
-	setVisibility([3, 12,17].indexOf(thisIntfID) >= 0, document.getElementById("dccstep").parentElement);
-	setVisibility([3, 12].indexOf(thisIntfID) >= 0, document.getElementById("btnAssignsp"));
-	setVisibility([3, 12,17].indexOf(thisIntfID) >= 0, document.getElementById("dccaddrsp").parentElement);
-	setVisibility([3, 12,17].indexOf(thisIntfID) >= 0, document.getElementById("dccaddrtbl").parentElement);
+	setVisibility([3, 12,17,18].indexOf(thisIntfID) >= 0, document.getElementById("dccaddr").parentElement);
+	setVisibility([3, 12,17,18].indexOf(thisIntfID) >= 0, document.getElementById("dccstep").parentElement);
+	setVisibility([3, 12,18].indexOf(thisIntfID) >= 0, document.getElementById("btnAssignsp"));
+	setVisibility([3, 12,17,18].indexOf(thisIntfID) >= 0, document.getElementById("dccaddrsp").parentElement);
+	setVisibility([3, 12,17,18].indexOf(thisIntfID) >= 0, document.getElementById("dccaddrtbl").parentElement);
 
 //	setVisibility([6,12].indexOf(configData[nodeCfg].InterfaceIndex) >= 0, document.getElementById("dccstepsp"));//.parentElement);
-	setVisibility([3, 12,17].indexOf(thisIntfID) >= 0, document.getElementById("cbsetup_2"));
+	setVisibility([3, 12,17,18].indexOf(thisIntfID) >= 0, document.getElementById("cbsetup_3"));
 //	setVisibility([6,12].indexOf(configData[nodeCfg].InterfaceIndex) >= 0, document.getElementById("cbsetup_tx_2"));
 	
 	setVisibility(validLocoDef, document.getElementById("btnSaveDecoder"));
+	setVisibility(validLocoDef && validTableDef, document.getElementById("btnSaveDecoderXML"));
 	setVisibility(validThrottleDef, document.getElementById("btnSaveThrottle"));
-	setVisibility(validTableDef, document.getElementById("btnProg"));
+	setVisibility(validTableDef && (locoAddrValid || validLocoDef) && ([3,12,18].indexOf(thisIntfID) >= 0), document.getElementById("btnProg"));
 
-	setVisibility(!validLocoDef && [17,12].indexOf(thisIntfID) >= 0, cvTableNative);
+	setVisibility(!validLocoDef && [17,18, 12].indexOf(thisIntfID) >= 0, cvTableNative);
 	setVisibility(validLocoDef, cvTableJMRI);
-	setVisibility([3, 12].indexOf(thisIntfID) >= 0, tabProgrammer);
+	setVisibility([3, 12,18].indexOf(thisIntfID) >= 0, tabProgrammer);
+	setVisibility([3, 12,18].indexOf(thisIntfID) >= 0, progDispPane);
 
-	setVisibility(validLocoDef || [3, 12,17].indexOf(thisIntfID) >= 0, techSpeedDiv);
-	setVisibility(validTechSpeedDef, speedTableDiv);
+	setVisibility(validLocoDef || [3, 12,17,18].indexOf(thisIntfID) >= 0, techSpeedDiv);
+	setVisibility(validTableDef, speedTableDiv);
 	
-	setVisibility(false, document.getElementById("cbsetup_3")); //do not show Layout TPS tab right now
-	
+	setVisibility(false, document.getElementById("cbsetup_4")); //do not show Layout TPS tab right now
 
+	setVisibility(validTechSpeedDef, document.getElementById("btnSaveProfile")); 
+	setVisibility(locoAddrValid, document.getElementById("cbCurrSpeedPane")); 
+	setVisibility(document.getElementById("cbCurrSpeed").checked && (configData[workCfg].ProgMode == 1), document.getElementById("trimValPane")); 
+	
+	setVisibility(configData[workCfg].TrimMode == 1, document.getElementById("trimreservepad")); 
+	
 //	setVisibility((!trackRecMode && (trackRecFile != "")), document.getElementById("btnStartTrack"));
 //	setVisibility(trackRecMode, document.getElementById("btnEndTrack"));
 //	setVisibility(trackRecFile != "", document.getElementById("btnGetTrack"));
@@ -104,7 +153,7 @@ function setButtonStatus()
 
 function constructPageContent(contentTab)
 {
-	var menueStr = ["Setup", "Track Data", "Speed Magic", "Layout TPS"];
+	var menueStr = ["Setup", "Track Data", "Analysis", "Speed Magic", "Layout TPS"];
 	var tempObj;
 	mainScrollBox = createEmptyDiv(contentTab, "div", "pagetopicboxscroll-y", "btnconfigdiv");
 //		createPageTitle(mainScrollBox, "div", "tile-1", "", "h1", "Track Measuring Car Viewer");
@@ -116,13 +165,43 @@ function constructPageContent(contentTab)
 		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
 			createPageTitle(tempObj, "div", "tile-1", "", "h1", "Setup");
 			createTextInput(tempObj, "tile-1_4", "Wheel Diameter [mm]:", "n/a", "wheelsize", "setWheelSize(this)");
+			createButton(tempObj, "", "Measure", "btnWheelSize", "measureWheelSize(this)");
 			createTextInput(tempObj, "tile-1_4", "Mag. Threshold:", "n/a", "magincr", "setMagIncr(this)");
 			createCheckbox(tempObj, "tile-1_4", "Reverse Dir", "cbRevDir", "setDir(this)");
 		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
 			createDropdownselector(tempObj, "tile-1_4", "Scale:", ["1:22.5","1:29","1:87", "1:160"], "selectscale", "setScaleSettings(this)");
 			createDropdownselector(tempObj, "tile-1_4", "Display:", dimOptions, "selectdim", "setDimSettings(this)");
+			createDropdownselector(tempObj, "tile-1_4", "Font Size:", sizeOptions, "selectfontsize", "setFontSettings(this)");
 		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
 			createDropdownselector(tempObj, "tile-1_4", "Orientation:", ["Flat","Upright"], "mountstyle", "setMountingStyle(this)");
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createTextInput(tempObj, "tile-1_3", "Testtrack Length [mm]:", "n/a", "ttracklen", "setTrackLength(this)");
+		progDispPane = createEmptyDiv(tempObj, "div", "", "");
+			createDropdownselector(progDispPane, "tile-1_4", "Default Programmer:", ["Prog Track","Main Line"], "rbdefprogmode", "setProgMode(this)");
+			createDropdownselector(progDispPane, "tile-1_4", "Default Prog. Mode:", ["Direct","Paged"], "rbdefprogmethod", "setProgMethod(this)");
+/*
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createRadiobox(tempObj, "tile-1_2", "Default Programmer", ["Prog Track","Main Line"], "rbdefprogmode", "setProgMode(this)");
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createRadiobox(tempObj, "tile-1_2", "Default Prog Mode", ["Direct","Paged"], "rbdefprogmethod", "setProgMethod(this)");
+*/
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createPageTitle(tempObj, "div", "tile-1", "", "h1", "Color Settings Track Data");
+			colorTableSpeedDisp = createDataTable(tempObj, "tile-1_2", ["Color Object Speed Data", "Select Color"], "ccspeeddisp", "");
+//			colorTableAngleDisp = createDataTable(tempObj, "tile-1_2", ["Color Object Track Angles", "Select Color"], "ccangledisp", "");
+
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createPageTitle(tempObj, "div", "tile-1", "", "h1", "Color Settings Analysis Data");
+			colorTableAnalysis = createDataTable(tempObj, "tile-1_2", ["Color Object Stability", "Select Color"], "ccspeedanalysis", "");
+
+		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+			createPageTitle(tempObj, "div", "tile-1", "", "h1", "Color Settings SpeedMagic");
+			colorTableThrottle = createDataTable(tempObj, "tile-1_2", ["Color Object Throttle", "Select Color"], "ccspeedthrottle", "");
+			colorTableProfile = createDataTable(tempObj, "tile-1_2", ["Color Object Speed Profile", "Select Color"], "ccspeedprofile", "");
+			colorTableTable = createDataTable(tempObj, "tile-1_2", ["Color Object Speed Table", "Select Color"], "ccspeedtable", "");
+
+//		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
+//			createPageTitle(tempObj, "div", "tile-1", "", "h1", "Sensor Calibration");
 
 		tempObj = createEmptyDiv(tabSetup, "div", "tile-1", "");
 			createButton(tempObj, "", "Save & Restart", "btnSave", "saveSettings(this)");
@@ -142,20 +221,25 @@ function constructPageContent(contentTab)
 			createDispText(tabMeasurement, "tile-1_4", "Speed Step:","n/a","dccstep");
 			var dispObj = createEmptyDiv(tabMeasurement, "div", "tile-1", "");
 				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Speed and Distance");
-				createDispText(dispObj, "", "Phys. Speed [mm/s]:", "n/a", "speed");
-				createDispText(dispObj, "", "Scale Speed:", "n/a", "scalespeed");
-				createDispText(dispObj, "", "Abs. Distance:", "n/a", "absdist");
-				createDispText(dispObj, "", "Rel. Distance:", "n/a", "reldist");
+
+				speedDistTable = createDataTable(dispObj, "tile-1_2", ["Direction", "","Phys. Speed [mm/s]", "","Scale Speed","", "Abs. Distance","", "Rel. Distance"], "speeddisptable", "");
+
+//				createDispText(dispObj, "", "Phys. Speed [mm/s]:", "n/a", "speed");
+//				createDispText(dispObj, "", "Scale Speed:", "n/a", "scalespeed");
+//				createDispText(dispObj, "", "Abs. Distance:", "n/a", "absdist");
+//				createDispText(dispObj, "", "Rel. Distance:", "n/a", "reldist");
 
 			var dispObj = createEmptyDiv(tabMeasurement, "div", "tile-1", "Orientation");
 				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Orientation");
-				createDispText(dispObj, "", "Radius [mm]:", "n/a", "radius");
-				createDispText(dispObj, "", "Heading [Deg]:", "n/a", "heading");
-				createDispText(dispObj, "", "Grade [%]:", "n/a", "pitch");
-				createDispText(dispObj, "", "Superelevation [%]:", "n/a", "roll");
+				elevPitchTable = createDataTable(dispObj, "tile-1_2", ["Radius [mm]", "", "Heading [Deg.]", "", "Grade [%]", "", "Superelevation [%]"], "elevpitchtable", "");
+
+//				createDispText(dispObj, "", "Radius [mm]:", "n/a", "radius");
+//				createDispText(dispObj, "", "Heading [Deg]:", "n/a", "heading");
+//				createDispText(dispObj, "", "Grade [%]:", "n/a", "pitch");
+//				createDispText(dispObj, "", "Superelevation [%]:", "n/a", "roll");
 
 			var dispObj = createEmptyDiv(tabMeasurement, "div", "tile-1", "SelectDisplay");
-				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Select Data Trackers");
+				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Select Data Trackers and Colors");
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				createCheckbox(tempObj, "tile-1_4", "Technical Speed", "cbTechSpeed", "setTracker(this)");
 				createCheckbox(tempObj, "tile-1_4", "Scale Speed", "cbScaleSpeed", "setTracker(this)");
@@ -165,9 +249,9 @@ function constructPageContent(contentTab)
 //				createCheckbox(tempObj, "tile-1_4", "Track Radius", "cbRadius", "setTracker(this)");
 //				createCheckbox(tempObj, "tile-1_4", "Heading", "cbHeading", "setTracker(this)");
 
-//				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
-//				createCheckbox(tempObj, "tile-1_4", "Grade", "cbGrade", "setTracker(this)");
-//				createCheckbox(tempObj, "tile-1_4", "Superelevation", "cbSElevation", "setTracker(this)");
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
+				createCheckbox(tempObj, "tile-1_4", "Grade", "cbGrade", "setTracker(this)");
+				createCheckbox(tempObj, "tile-1_4", "Superelevation", "cbSElevation", "setTracker(this)");
 
 			tempObj = createEmptyDiv(tabMeasurement, "div", "tile-1", "");
 				createPageTitle(tempObj, "div", "tile-1", "", "h2", "Measurement Data");
@@ -196,6 +280,29 @@ function constructPageContent(contentTab)
 //				canvasElementRadius.setAttribute("width", canvasSizeSpeed[0]);
 //				canvasElementRadius.setAttribute("height", canvasSizeSpeed[1]);
 
+
+		tabAnalysis = createEmptyDiv(mainScrollBox, "div", "tile-1", "");
+			setVisibility(false, tabAnalysis);
+			createPageTitle(tabAnalysis, "div", "tile-1", "", "h1", "Locomotive Analysis");
+			createButton(tabAnalysis, "", "Start", "btnWheelStart", "startMeasuring(this)");
+			createButton(tabAnalysis, "", "Assign DCC Address", "btnWheelAssign", "assignDCC(this)");
+			createDispText(tabAnalysis, "tile-1_4", "DCC Address:","n/a","dccwheeladdr");
+			createDispText(tabAnalysis, "tile-1_4", "Speed Step:","n/a","dccwheelstep");
+
+			tempObj = createEmptyDiv(tabAnalysis, "div", "tile-1", "");
+				createPageTitle(tempObj, "div", "tile-1", "", "h2", "Speed Stability Data");
+				var dispObj = createEmptyDiv(tempObj, "div", "tile-1", "");
+				canvasElementAnalysis = document.createElement("canvas");
+				tempObj.append(canvasElementAnalysis);
+				canvasElementAnalysis.setAttribute("id", "glCanvasAnalysis");
+/*
+			tempObj = createEmptyDiv(tabAnalysis, "div", "tile-1", "");
+				createPageTitle(tempObj, "div", "tile-1", "", "h2", "Throttle Position to Scale Speed");
+				var dispObj = createEmptyDiv(tempObj, "div", "tile-1", "");
+				canvasElementSpeedVerify = document.createElement("canvas");
+				tempObj.append(canvasElementSpeedVerify);
+				canvasElementSpeedVerify.setAttribute("id", "glCanvasVerify");
+*/
 		tabSpeedMatch  = createEmptyDiv(mainScrollBox, "div", "tile-1", "");
 			setVisibility(false, tabSpeedMatch);
 			createPageTitle(tabSpeedMatch, "div", "tile-1", "", "h1", "Speed Magic");
@@ -224,7 +331,6 @@ function constructPageContent(contentTab)
 					tempObj = createEmptyDiv(cvTableJMRI, "div", "tile-1", "");
 					createDispText(tempObj, "tile-1_4", "CV 29:","n/a","cv29");
 
-
 				cvTableNative = createEmptyDiv(dispObj, "div", "tile-1", "");
 					tempObj = createEmptyDiv(cvTableNative, "div", "tile-1", "");
 					createTextInput(tempObj, "tile-1_4", "CV 2:", "0", "cvn02", "setCVVal(this)");
@@ -249,6 +355,7 @@ function constructPageContent(contentTab)
 				setVisibility(false, tabProgrammer);
 				setVisibility(true, cvTableNative);
 				setVisibility(false, cvTableJMRI);
+				setVisibility(true, canvasElementAnalysis);
 
 				setVisibility(false, canvasElementGrade);
 				setVisibility(false, canvasElementRadius);
@@ -258,33 +365,46 @@ function constructPageContent(contentTab)
 				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Throttle Profile");
 				createFileDlg(dispObj, "", "Load Profile", "btnLoadThrottle", "application/json", "loadThrottle(this)");
 				createButton(dispObj, "", "Save Profile", "btnSaveThrottle", "saveThrottle(this)");
+				createTextInput(dispObj, "tile-1_4", "Profile Name:", "n/a", "thprofilename", "setThrottleProfile(this)");
 				createDispText(dispObj, "tile-1_4", "File Name:","n/a","throttlefilename");
 
-				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
-				createTextInput(tempObj, "tile-1_4", "Profile Name:", "n/a", "thprofilename", "setThrottleProfile(this)");
+//				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				createTextInput(tempObj, "tile-1_4", "Max. Scale:", "n/a", "thscalespeed", "setThrottleProfile(this)");
 				createTextInput(tempObj, "tile-1_4", "@ Throttle Step:", "n/a", "thvmax", "setThrottleProfile(this)");
 				createTextInput(tempObj, "tile-1_4", "of # Steps:", "n/a", "thnumsteps", "setThrottleProfile(this)");
 
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "cbCurrSpeedPane");
+				createCheckbox(tempObj, "tile-1_4", "Show Current Speed", "cbCurrSpeed", "setCurrSpeed(this)");
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				canvasElementThrottle = document.createElement("canvas");
 				tempObj.append(canvasElementThrottle);
 				canvasElementThrottle.setAttribute("id", "glCanvasThrottle");
 				setCanvasMouseEvents(canvasElementThrottle);
 
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "trimValPane");
+				createTextInput(tempObj, "tile-1_4", "Forward Trim:", "n/a", "fwtrimadj", "setTrim(this)");
+				createTextInput(tempObj, "tile-1_4", "Backward Trim:", "n/a", "bwtrimadj", "setTrim(this)");
+				createButton(tempObj, "", "Adjust Trim Values", "btnsendtrimvals", "sendTrimValues(this)");
+
+
 			var dispObj = createEmptyDiv(tabSpeedMatch, "div", "tile-1", "Technical Speed Profile");
 				techSpeedDiv = dispObj;
 				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Technical Speed Profile");
+				createFileDlg(dispObj, "", "Load Profile", "btnLoadProfile", "application/json", "loadProfile(this)");
+				createButton(dispObj, "", "Save Profile", "btnSaveProfile", "saveProfile(this)");
+				createTextInput(dispObj, "tile-1_4", "Profile Name:", "n/a", "techprofilename", "setTechProfile(this)");
+				createDispText(dispObj, "tile-1_4", "File Name:","n/a","techprofilefilename");
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				createButton(tempObj, "", "Assign DCC Address", "btnAssignsp", "assignDCC(this)");
 				createDispText(tempObj, "tile-1_4", "DCC Address:","n/a","dccaddrsp");
-//				createDispText(tempObj, "tile-1_4", "Speed Step:","n/a","dccstepsp");
-				createRadiobox(tempObj, "tile-1_2", "Speed Steps:", ["28","128"], "dccstepsp", "setTestMode(this)");
+				createDispText(tempObj, "tile-1_4", "Speed Step:","n/a","dccstepsp");
+				var ssRB = createRadiobox(tempObj, "tile-1_2", "Speed Steps:", ["28","127"], "dccstepsprb", "setTestMode(this)");
+				setVisibility(false, ssRB);
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
-				createButton(tempObj, "", "Start Test", "btnTrackLen", "startSpeedTest(this)");
-				createButton(tempObj, "", "Abort Test", "btnTrackLen", "abortSpeedTest(this)");
-				createTextInput(tempObj, "tile-1_4", "Track length [cm]:", "n/a", "testtracklen", "setTrackLength(this)");
+				createButton(tempObj, "", "Start Test", "btnstarttest", "startSpeedTest(this)");
+				createButton(tempObj, "", "Abort Test", "btnaborttest", "abortSpeedTest(this)");
+				createTextInput(tempObj, "tile-1_4", "Track length [mm]:", "n/a", "testtracklen", "setTrackLength(this)");
 				createTextInput(tempObj, "tile-1_4", "max. Speed [km/h]:", "n/a", "testmaxspeed", "setTestSpeed(this)");
 
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
@@ -296,16 +416,27 @@ function constructPageContent(contentTab)
 			var dispObj = createEmptyDiv(tabSpeedMatch, "div", "tile-1", "Speed Table Settings");
 				speedTableDiv = dispObj;
 				createPageTitle(dispObj, "div", "tile-1", "", "h2", "Speed Table Settings");
+
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
+				createRadiobox(tempObj, "tile-1_2", "Calculation Base:", ["Average", "Lower Curve","Higher Curve"], "calcbase", "setCalcBase(this)");
+
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "trimreservepad");
+				createTextInput(tempObj, "tile-1_2", "Trim Reserve [%]:", 0, "trimreserve", "setTrimReserve(this)");
+				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
+				createRadiobox(tempObj, "tile-1_2", "Trim Range:", ["0-200%", "0-100%"], "trimmode", "setTrimMode(this)");
+
+//				createRadiobox(tempObj, "tile-1_2", "Use", ["Speed Table","Min/Mid/Max only"], "rbtablemode", "setTableMode(this)");
+
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				createButton(tempObj, "", "Recalculate", "btnRecalc", "calcTable(this)");
 				createButton(tempObj, "", "Write CV's", "btnProg", "progTable(this)");
+				createButton(tempObj, "", "Save JMRI File", "btnSaveDecoderXML", "saveJMRIDecoder(this)");
 				createDispText(tempObj, "tile-1_4", "DCC Address:","n/a","dccaddrtbl");
-				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
-				createRadiobox(tempObj, "tile-1_2", "Trim Range", ["0 - 200%", "0 - 100%"], "trimmode", "setTrimMode(this)");
-//				createRadiobox(tempObj, "tile-1_2", "Use", ["Speed Table","Min/Mid/Max only"], "rbtablemode", "setTableMode(this)");
+
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				createTextInput(tempObj, "tile-1_4", "Forward Trim:", "n/a", "fwtrim", "setTrim(this)");
 				createTextInput(tempObj, "tile-1_4", "Backward Trim:", "n/a", "bwtrim", "setTrim(this)");
+
 		
 				tempObj = createEmptyDiv(dispObj, "div", "tile-1", "");
 				canvasElementSpeedTable = document.createElement("canvas");
@@ -315,16 +446,185 @@ function constructPageContent(contentTab)
 
 				tabGPS = createEmptyDiv(mainScrollBox, "div", "tile-1", "");
 				createPageTitle(tabGPS, "div", "tile-1", "", "h1", "Layout TPS");
+//				setVisibility(false, document.getElementById("btnSaveDecoderXML"));
 				setVisibility(false, tabGPS);
+		mainScrollBox.addEventListener('scroll', function () 
+			{	
+				if (!isInViewport(canvasElementThrottle))
+					if (document.getElementById("cbCurrSpeed").checked)
+					{
+						measureSpeed(false);
+						setButtonStatus();
+					}
+			});
 
 		setTrackerDisplay();
+}
+
+function setColorData(sender)
+{
+	var thisRow = parseInt(sender.getAttribute("row"));
+	var thisCol = parseInt(sender.getAttribute("col"));
+	var thisIndex = parseInt(sender.getAttribute("index"));
+	var thisColorStr = sender.value.replace("#", "0x");
+	var thisColor = parseInt(thisColorStr);
+	var colorArray = [((thisColor & 0xFF0000) >> 16), ((thisColor & 0x00FF00) >> 8), (thisColor & 0x0000FF)];
+	if (sender.id.search("ccspeeddisp_") == 0)
+		configData[workCfg].LEDColsSpeedDisp[thisRow].RGBVal = colorArray; //background
+	if (sender.id.search("ccangledisp_") == 0)
+		configData[workCfg].LEDColsAngleDisp[thisRow].RGBVal = colorArray; //background
+	if (sender.id.search("ccspeedanalysis_") == 0)
+		configData[workCfg].LEDColsStability[thisRow].RGBVal = colorArray; //background
+	if (sender.id.search("ccspeedthrottle_") == 0)
+		configData[workCfg].LEDColsThrottle[thisRow].RGBVal = colorArray; //background
+	if (sender.id.search("ccspeedprofile_") == 0)
+		configData[workCfg].LEDColsProfile[thisRow].RGBVal = colorArray; //background
+	if (sender.id.search("ccspeedtable_") == 0)
+		configData[workCfg].LEDColsTable[thisRow].RGBVal = colorArray; //background
+}
+
+function loadSpeedDispTable(thisTable, jsonData)
+{
+	var th = document.getElementById(thisTable.id + "_head");
+	var tb = document.getElementById(thisTable.id + "_body");
+	var scaleStr = configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Name;
+	if (jsonData.Units)
+	{
+		th.childNodes[0].childNodes[4].innerHTML = scaleStr + " Scale Speed [mph]";
+		th.childNodes[0].childNodes[6].innerHTML = "Abs. Distance [in]";
+		th.childNodes[0].childNodes[8].innerHTML = "Rel. Distance [in]";
+	}
+	else
+	{
+		th.childNodes[0].childNodes[4].innerHTML = scaleStr + " Scale Speed [km/h]";
+		th.childNodes[0].childNodes[6].innerHTML = "Abs. Distance [cm]";
+		th.childNodes[0].childNodes[8].innerHTML = "Rel. Distance [cm]";
+	}
+	var numCols = th.childNodes[0].children.length;
+	createDataTableLines(thisTable, [tfText,tfText,tfText,tfText,tfText,tfText,tfText,tfText,tfText], 1, "");	
+	var fSize = configData[workCfg].SpeedDispSize.toString() + "%";
+	tb.childNodes[0].style.height = 50 * (configData[workCfg].SpeedDispSize/100); // * tb.style.fontSize;
+	var e = document.getElementById(thisTable.id + "_0_0");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = jsonData.Speed > 0 ? " FW" : jsonData.Speed < 0 ? " BW" : "   ";
+	var e = document.getElementById(thisTable.id + "_0_1");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var currScale = configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale;
+	var scaleSpeed = ((jsonData.Speed  * 36 * currScale) / 10000).toFixed(2); //[km/h]
+	var e = document.getElementById(thisTable.id + "_0_2");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = configData[workCfg].Units == 0 ? scaleSpeed : scaleSpeed / 1.6;
+	var e = document.getElementById(thisTable.id + "_0_3");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_4");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = Math.abs(jsonData.Speed).toFixed(2);
+	var e = document.getElementById(thisTable.id + "_0_5");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_6");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = configData[workCfg].Units == 0 ? (jsonData.AbsDist/10).toFixed(2) : (jsonData.AbsDist/25.4).toFixed(2);
+	var e = document.getElementById(thisTable.id + "_0_7");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_8");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = configData[workCfg].Units == 0 ? (jsonData.RelDist/10).toFixed(2) : (jsonData.RelDist/25.4).toFixed(2);
+}
+
+function loadElevPitchTable(thisTable, jsonData)
+{
+	var th = document.getElementById(thisTable.id + "_head");
+	var tb = document.getElementById(thisTable.id + "_body");
+	if (jsonData.Units)
+		th.childNodes[0].childNodes[0].innerHTML = "Radius [in]";
+	else
+		th.childNodes[0].childNodes[0].innerHTML = "Radius [mm]";
+	var numCols = th.childNodes[0].children.length;
+
+	createDataTableLines(thisTable, [tfText,tfText,tfText,tfText,tfText,tfText,tfText], 1, "");	
+	var fSize = configData[workCfg].SpeedDispSize.toString() + "%";
+	tb.childNodes[0].style.height = 50 * (configData[workCfg].SpeedDispSize/100); // * tb.style.fontSize;
+	var e = document.getElementById(thisTable.id + "_0_0");
+	e.childNodes[0].style.fontSize = fSize;
+	var radiusVal = Math.min(5000, configData[workCfg].Units == 0 ? Math.abs(jsonData.Radius) : Math.abs(jsonData.Radius)/25.4);
+	var radiusValGraph = radiusVal > 2000 ? 0 : radiusVal;
+	var radiusSig = jsonData.Radius >= 0 ? 1 : -1; 
+	var radiusStr = radiusVal.toFixed(2);
+	if ((jsonData.Radius != 0) && (Math.abs(jsonData.Radius) < 5000))
+		dirStr = radiusStr + ((radiusSig > 0) ? " right" : " left");
+	else
+		dirStr = " straight";
+	e.childNodes[0].innerHTML = dirStr;
+	var e = document.getElementById(thisTable.id + "_0_1");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_2");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = (180 * jsonData.EulerVect[0] / 3.1415).toFixed(2);
+	var e = document.getElementById(thisTable.id + "_0_3");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_4");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = jsonData.Slope ? jsonData.Slope.toFixed(1) : "n/a";
+	var e = document.getElementById(thisTable.id + "_0_5");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = "&nbsp";
+	var e = document.getElementById(thisTable.id + "_0_6");
+	e.childNodes[0].style.fontSize = fSize;
+	e.childNodes[0].innerHTML = jsonData.Banking ? jsonData.Banking.toFixed(1) : "n/a";
+}
+
+function loadColorTable(thisTable, thisData)
+{
+	function toHex(numbers) 
+	{
+		var r = numbers[0].toString(16), /* 1 */
+			g = numbers[1].toString(16),
+			b = numbers[2].toString(16);
+		while (r.length < 2) {r = "0" + r};
+		while (g.length < 2) {g = "0" + g};
+		while (b.length < 2) {b = "0" + b};
+		return "#" + r + g + b;
+	}
+
+	var th = document.getElementById(thisTable.id + "_head");
+	var tb = document.getElementById(thisTable.id + "_body");
+	var numCols = th.childNodes[0].children.length;
+
+	createDataTableLines(thisTable, [tfText,tfColorPicker], thisData.length, "setColorData(this)");	
+
+	for (var i=0; i<thisData.length;i++)
+	{
+		var e = document.getElementById(thisTable.id + "_" + i.toString() + "_" + "0");
+		e.childNodes[0].innerHTML = thisData[i].Name;
+		var e = document.getElementById(thisTable.id + "_" + i.toString() + "_" + "1");
+		if (thisData[i].RGBVal == undefined)
+		{
+			thisData[i].RGBVal = HSVtoRGB(thisData[i].HSVVal[0], thisData[i].HSVVal[1], thisData[i].HSVVal[2]);
+//			console.log(thisData[i]);
+		}
+		var colStr = toHex(thisData[i].RGBVal);
+		e.childNodes[0].value = colStr;
+	}
 }
 
 function drawLineGraphs()
 {
 	drawLineGraph(canvasElementSpeed, speedGraph);
-	drawLineGraph(canvasElementGrade, radiusGraph);
-	drawLineGraph(canvasElementRadius, angleGraph);
+	drawLineGraph(canvasElementGrade, angleGraph);
+	drawLineGraph(canvasElementRadius, radiusGraph);
+//	drawLineGraph(canvasElementAnalysis, stabilityGraph);
+}
+
+function drawStabilityGraphs()
+{
+	drawLineGraph(canvasElementAnalysis, stabilityGraph);
+//	drawProfileBox(canvasElementSpeedVerify, speedVerifyProfileGraph);
 }
 
 function drawSpeedMagicGraphs()
@@ -348,8 +648,18 @@ function setPageMode(sender)
 {
 	setVisibility(false, tabSetup);
 	setVisibility(false, tabMeasurement);
+	setVisibility(false, tabAnalysis);
 	setVisibility(false, tabSpeedMatch);
 	setVisibility(false, tabGPS);
+
+
+
+	closeWheelSize(sender);
+	ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":0}");
+	document.getElementById("btnStart").innerHTML = "Start";
+	document.getElementById("btnStartLow").innerHTML = "Start";
+	document.getElementById("btnWheelStart").innerHTML = "Start";
+	document.getElementById("cbCurrSpeed").checked = false;
 
 	switch (sender.id)
 	{
@@ -363,10 +673,14 @@ function setPageMode(sender)
 			break;
 		case "cbsetup_2":
 //			writeRBInputField("cbsetup", 2);
-			setVisibility(true, tabSpeedMatch);
+			setVisibility(true, tabAnalysis);
 			break;
 		case "cbsetup_3":
 //			writeRBInputField("cbsetup", 3);
+			setVisibility(true, tabSpeedMatch);
+			break;
+		case "cbsetup_4":
+//			writeRBInputField("cbsetup", 4);
 			setVisibility(true, tabGPS);
 			break;
 	}
@@ -380,8 +694,8 @@ function setTrackerDisplay()
 	document.getElementById("cbScaleSpeed").checked = (trackerDisp & 0x04) > 0;
 //	document.getElementById("cbRadius").checked = (trackerDisp & 0x08) > 0;
 //	document.getElementById("cbHeading").checked = (trackerDisp & 0x10) > 0;
-//	document.getElementById("cbGrade").checked = (trackerDisp & 0x20) > 0;
-//	document.getElementById("cbSElevation").checked = (trackerDisp & 0x40) > 0;
+	document.getElementById("cbGrade").checked = (trackerDisp & 0x20) > 0;
+	document.getElementById("cbSElevation").checked = (trackerDisp & 0x40) > 0;
 	
 }
 
@@ -420,6 +734,7 @@ function setTracker(sender)
 			break;
 	}
 	drawLineGraphs();
+	drawStabilityGraphs();
 }
 
 function loadSettings(sender)
@@ -454,13 +769,16 @@ function loadSettings(sender)
     reader.readAsText(fileName);	
 }
 
+
 function loadNodeDataFields(jsonData)
 {
 //	console.log(jsonData);
 //	console.log(thisIntfID);
 	setButtonStatus();
-	document.getElementById("btnProg").innerHTML = thisIntfID == 17 ? "Save JMRI File" : "Write CV's";
+//	document.getElementById("btnProg").innerHTML = thisIntfID == 17 ? "Save JMRI File" : "Write CV's";
+//	setVisibility(false, document.getElementById("btnSaveDecoderXML"));
 }
+
 
 function loadDataFields(jsonData)
 {
@@ -470,6 +788,7 @@ function loadDataFields(jsonData)
 	writeInputField("wheelsize", jsonData.WheelDia);
 	writeInputField("magincr", jsonData.MagThreshold);
 	writeInputField("testtracklen", jsonData.TrackLen);
+	writeInputField("ttracklen", jsonData.TrackLen);
 	if (jsonData.ScaleList != undefined)
 	{
 		//load scale list
@@ -489,47 +808,114 @@ function loadDataFields(jsonData)
 	else
 		setDropdownValue("selectscale", 0);
 	setDropdownValue("selectdim", jsonData.Units); //most likely HO
+	setDropdownValue("selectfontsize", Math.round(jsonData.SpeedDispSize /100) - 1); //most likely HO
 	setDropdownValue("mountstyle", jsonData.MountStyle); //flat or upright
 	var scaleStr = jsonData.ScaleList[jsonData.ScaleIndex].Name;
 	switch (jsonData.Units)
 	{
 		case 0: 
-			document.getElementById("scalespeed_txt").innerHTML = scaleStr + " Scale Speed [km/h]";
-			document.getElementById("absdist_txt").innerHTML = "Abs. Distance [cm]";
-			document.getElementById("reldist_txt").innerHTML = "Rel. Distance [cm]";
-			document.getElementById("radius_txt").innerHTML = "Radius [mm]";
+//			document.getElementById("scalespeed_txt").innerHTML = scaleStr + " Scale Speed [km/h]";
+//			document.getElementById("absdist_txt").innerHTML = "Abs. Distance [cm]";
+//			document.getElementById("reldist_txt").innerHTML = "Rel. Distance [cm]";
+//			document.getElementById("radius_txt").innerHTML = "Radius [mm]";
 			document.getElementById("thscalespeed_txt").innerHTML = "Max. Scale [km/h]";
-			document.getElementById("testtracklen_txt").innerHTML = "Track Length [cm]"; 
+			document.getElementById("testtracklen_txt").innerHTML = "Track Length [mm]"; 
+			document.getElementById("ttracklen_txt").innerHTML = "Track Length [mm]"; 
 			document.getElementById("testmaxspeed_txt").innerHTML = "Max Speed [km/h]"; 
 			document.getElementById("jmrivmax_txt").innerHTML = "Max Speed [km/h]:"; 
 			
 			break;
 		case 1: 
-			document.getElementById("scalespeed_txt").innerHTML = scaleStr + " Scale Speed [mph]";
-			document.getElementById("absdist_txt").innerHTML = "Abs. Distance [in]";
-			document.getElementById("reldist_txt").innerHTML = "Rel. Distance [in]";
-			document.getElementById("radius_txt").innerHTML = "Radius [in]";
+//			document.getElementById("scalespeed_txt").innerHTML = scaleStr + " Scale Speed [mph]";
+//			document.getElementById("absdist_txt").innerHTML = "Abs. Distance [in]";
+//			document.getElementById("reldist_txt").innerHTML = "Rel. Distance [in]";
+//			document.getElementById("radius_txt").innerHTML = "Radius [in]";
 			document.getElementById("thscalespeed_txt").innerHTML = "Max. Scale [mph]";
 			document.getElementById("testtracklen_txt").innerHTML = "Track Length [in]";
+			document.getElementById("ttracklen_txt").innerHTML = "Track Length [in]";
 			document.getElementById("testmaxspeed_txt").innerHTML = "Max Speed [mph]"; 
 			document.getElementById("jmrivmax_txt").innerHTML = "Max Speed [mph]:"; 
 			break;
 	}
 	writeRBInputField("rbprogmethod", configData[workCfg].ProgMethod);
+	setDropdownValue("rbdefprogmethod", configData[workCfg].ProgMethod);
 	writeRBInputField("rbprogmode", configData[workCfg].ProgMode);
-	writeRBInputField("trimmode", trimMode);
-	writeRBInputField("dccstepsp", stepMode);
+	setDropdownValue("rbdefprogmode", configData[workCfg].ProgMode);
+	writeRBInputField("calcbase", configData[workCfg].CalcMode);
+	writeRBInputField("trimmode", configData[workCfg].TrimMode);
+	writeRBInputField("dccstepsprb", stepMode);
 
-	
+//	console.log(configData[workCfg]);
+/*		
+	if (configData[workCfg].SpeedDispSize)
+	{
+		var fSize = configData[workCfg].SpeedDispSize.toString() + "%";
+		document.getElementById("speed").style.fontSize = fSize;
+		document.getElementById("scalespeed").style.fontSize = fSize;
+		document.getElementById("absdist").style.fontSize = fSize;
+		document.getElementById("reldist").style.fontSize = fSize;
+//		document.getElementById("radius").style.fontSize = fSize;
+//		document.getElementById("heading").style.fontSize = fSize;
+//		document.getElementById("pitch").style.fontSize = fSize;
+//		document.getElementById("roll").style.fontSize = fSize;
+	}
+*/	
+	if (configData[workCfg].LEDColsSpeedDisp)
+	{
+		graphColorSpeed = "rgb(" + configData[workCfg].LEDColsSpeedDisp[0].RGBVal.toString() + ")";
+		graphColorTechSpeed = "rgb(" + configData[workCfg].LEDColsSpeedDisp[1].RGBVal.toString() + ")";
+		graphColorScaleSpeed = "rgb(" + configData[workCfg].LEDColsSpeedDisp[2].RGBVal.toString() + ")";
+		graphColorSpeedStep = "rgb(" + configData[workCfg].LEDColsSpeedDisp[3].RGBVal.toString() + ")";
+		loadColorTable(colorTableSpeedDisp, configData[workCfg].LEDColsSpeedDisp);
+	}
+/*
+	if (configData[workCfg].LEDColsAngleDisp)
+	{
+		graphColorGrade = "rgb(" + configData[workCfg].LEDColsAngleDisp[0].RGBVal.toString() + ")";
+		graphColorSlope = "rgb(" + configData[workCfg].LEDColsAngleDisp[1].RGBVal.toString() + ")";
+		graphColorSElevation = "rgb(" + configData[workCfg].LEDColsAngleDisp[2].RGBVal.toString() + ")";
+		loadColorTable(colorTableAngleDisp, configData[workCfg].LEDColsAngleDisp);
+	}
+*/ 
+	if (configData[workCfg].LEDColsStability)
+	{
+		graphColorStability = "rgb(" + configData[workCfg].LEDColsStability[0].RGBVal.toString() + ")";
+		graphColorStab1 = "rgb(" + configData[workCfg].LEDColsStability[1].RGBVal.toString() + ")";
+		graphColorStab2 = "rgb(" + configData[workCfg].LEDColsStability[2].RGBVal.toString() + ")";
+		graphColorStab3 = "rgb(" + configData[workCfg].LEDColsStability[3].RGBVal.toString() + ")";
+		loadColorTable(colorTableAnalysis, configData[workCfg].LEDColsStability);
+	}
+	if (configData[workCfg].LEDColsThrottle)
+	{
+		graphBoxThrottle = "rgb(" + configData[workCfg].LEDColsThrottle[0].RGBVal.toString() + ")";
+		graphColorThrottle = "rgb(" + configData[workCfg].LEDColsThrottle[1].RGBVal.toString() + ")";
+		graphColorSpeedDot = "rgb(" + configData[workCfg].LEDColsThrottle[2].RGBVal.toString() + ")";
+		loadColorTable(colorTableThrottle, configData[workCfg].LEDColsThrottle);
+	}
+	if (configData[workCfg].LEDColsProfile)
+	{
+		graphBoxTechSpeed = "rgb(" + configData[workCfg].LEDColsProfile[0].RGBVal.toString() + ")";
+		graphColorTechProfileSpeedLimit = "rgb(" + configData[workCfg].LEDColsProfile[1].RGBVal.toString() + ")";
+		graphColorTechProfileSpeedFw = "rgb(" + configData[workCfg].LEDColsProfile[2].RGBVal.toString() + ")";
+		graphColorTechProfileSpeedBw = "rgb(" + configData[workCfg].LEDColsProfile[3].RGBVal.toString() + ")";
+		loadColorTable(colorTableProfile, configData[workCfg].LEDColsProfile);
+	}
+	if (configData[workCfg].LEDColsTable)
+	{
+		graphBoxSpeedTable = "rgb(" + configData[workCfg].LEDColsTable[0].RGBVal.toString() + ")";
+		graphColorSpeedTable = "rgb(" + configData[workCfg].LEDColsTable[1].RGBVal.toString() + ")";
+		loadColorTable(colorTableTable, configData[workCfg].LEDColsTable);
+	}
 
 	loadSpeedGraphData();
+	loadStabilityGraphData();
 	drawLineGraphs();
-	
+	drawStabilityGraphs();
 
 	setButtonStatus();
-	
 	loadSpeedMagicGraphData();
 	displayThrottleDef(throttleDef);
+	displayTechSpeedDef(speedProfileDef);
 	drawSpeedMagicGraphs();
 }
 
@@ -546,6 +932,11 @@ function setScaleSettings(sender)
 function setDimSettings(sender)
 {
 	configData[workCfg].Units = sender.selectedIndex;
+}
+
+function setFontSettings(sender)
+{
+	configData[workCfg].SpeedDispSize = 100 * (sender.selectedIndex + 1);
 }
 
 function setMountingStyle(sender)
@@ -606,8 +997,11 @@ function readCV(sender)
 			return;
 	if ((cvId >= 0) && (cvId <= 255))
 	{
-		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"ReadCV\", \"Addr\":" + locoAddr.toString() + ",\"ProgMode\":" + configData[workCfg].ProgMode.toString() + ",\"ProgMethod\":" + configData[workCfg].ProgMethod.toString() + ",\"CV\":" + cvId.toString() + "}");
 		writeTextField("progstat", "Read CV in progress");
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"ReadCV\", \"Addr\":" + locoAddr.toString() + ",\"ProgMode\":" + configData[workCfg].ProgMode.toString() + ",\"ProgMethod\":" + configData[workCfg].ProgMethod.toString() + ",\"CV\":" + cvId.toString() + "}");
+		progLastCommand = Date.now();
+		progStatus = 0;
+		progFailCtr = 0;
 	}
 	else
 		alert("Invalid CV");
@@ -617,35 +1011,83 @@ function writeCV(sender)
 {
 	if ((configData[workCfg].ProgMode > 0) && (locoAddr <= 0))
 	{
-		alert("Invalid Loco Address. Please assign a DCC Address.");
-		return;
+		if (sender) alert("Invalid Loco Address. Please assign a DCC Address.");
+		return false;
 	}
-	if (configData[workCfg].ProgMode == 0)
-		if (confirm("Place locomotive on programming track and click OK") == false)
-			return;
+	if (sender) 
+		if (configData[workCfg].ProgMode == 0)
+			if (confirm("Place locomotive on programming track and click OK") == false)
+				return false;
 	if ((cvId >= 0) && (cvVal >= 0) && (cvId <= 255) && (cvVal <= 255))
 	{
-		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"WriteCV\",\"Addr\":" + locoAddr.toString() + ", \"ProgMode\":" + configData[workCfg].ProgMode.toString() + ",\"ProgMode\":" + configData[workCfg].ProgMode.toString() + ",\"CV\":" + cvId.toString() + ",\"CVVal\":" + cvVal.toString() + "}");
-		writeTextField("progstat", "Write CV in progress");
+		if (sender) writeTextField("progstat", "Write CV in progress");
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"WriteCV\",\"Addr\":" + locoAddr.toString() + ", \"ProgMode\":" + configData[workCfg].ProgMode.toString() + ",\"ProgMethod\":" + configData[workCfg].ProgMethod.toString() + ",\"CV\":" + cvId.toString() + ",\"CVVal\":" + cvVal.toString() + "}");
+		progLastCommand = Date.now();
+		progStatus = 0;
+		progFailCtr = 0;
+		return true;
 	}
 	else
-		alert("Invalid CV or Value");
+	{
+		if (sender) alert("Invalid CV or CV Value");
+		return false;
+	}
 }
 
-function startMeasuring(sender)
+function sendTrimValues(sender)
 {
-	if (sender.innerHTML == "Start")
+	initProg(false);
+}
+
+function setCurrSpeed(sender)
+{
+	if (sender.checked)
 	{
-		clearAllGraphData();
-		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":500}");
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":250}");
 		document.getElementById("btnStart").innerHTML = "Stop";
 		document.getElementById("btnStartLow").innerHTML = "Stop";
+		document.getElementById("btnWheelStart").innerHTML = "Stop";
 	}
 	else
 	{
 		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":0}");
 		document.getElementById("btnStart").innerHTML = "Start";
 		document.getElementById("btnStartLow").innerHTML = "Start";
+		document.getElementById("btnWheelStart").innerHTML = "Start";
+		drawProfileBox(canvasElementThrottle, throttleProfileGraph);
+	}
+	setButtonStatus();
+}
+
+function startMeasuring(sender)
+{
+	if (sender.innerHTML == "Start")
+		if (sender.id == "btnWheelStart")
+			measureSpeed(250)
+		else
+			measureSpeed(500)
+	else
+		measureSpeed(0)
+}
+	
+function measureSpeed(refRate)
+{	
+	if (refRate > 0)
+	{
+		clearAllGraphData();
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":" + refRate.toString() + "}");
+		document.getElementById("btnStart").innerHTML = "Stop";
+		document.getElementById("btnStartLow").innerHTML = "Stop";
+		document.getElementById("btnWheelStart").innerHTML = "Stop";
+		document.getElementById("cbCurrSpeed").checked = true;
+	}
+	else
+	{
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":0}");
+		document.getElementById("btnStart").innerHTML = "Start";
+		document.getElementById("btnStartLow").innerHTML = "Start";
+		document.getElementById("btnWheelStart").innerHTML = "Start";
+		document.getElementById("cbCurrSpeed").checked = false;
 	}
 }
 
@@ -654,6 +1096,7 @@ function assignDCC(sender)
 	locoAddr = -1;
 	writeTextField("dccaddr", "listening...");
 	writeTextField("dccaddrsp", "listening...");
+	writeTextField("dccwheeladdr", "listening...");
 	reqDCCAssign(locoAddr);
 }
 
@@ -667,11 +1110,8 @@ function reqDCCAssign(forAddress)
 
 function startSpeedTest(sender)
 {
-//	processSpeedTableInput(testObj);
-//	return;
-	
 	if (locoAddr < 0)
-		if (thisIntfID == 17) //WiThrottle
+		if ((thisIntfID == 17) || (thisIntfID == 18)) //WiThrottle
 		{
 			alert("No DCC Address assigned! Verify connection to WiThrottle Server and reload JMRI file");
 			document.getElementById("btnLoadDecoder").files = [];
@@ -701,12 +1141,28 @@ function startSpeedTest(sender)
 			alert("No maximum speed specified");
 			return;
 		}
+		var speedPOI = [];
+//		console.log(throttleProfileGraph);
+		if (throttleProfileGraph.LineGraphs[0].DataElements.length > 0)
+		{
+			for (var i = 0; i < throttleProfileGraph.LineGraphs[0].DataElements.length; i++)
+			{
+				if ((throttleProfileGraph.LineGraphs[0].DataElements[i].y > 0) && (throttleProfileGraph.LineGraphs[0].DataElements[i].y < configData[workCfg].MaxTestSpeed))
+				{
+					var speedPt = (1000 * throttleProfileGraph.LineGraphs[0].DataElements[i].y / 3.6) / configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale;
+					if (configData[workCfg].Units == 1) //imperial
+						speedPt *= 1.6;
+					speedPOI.push(speedPt);
+				}
+			}
+		}
 		if (configData[workCfg].Units == 1) //imperial
 	{
-			trkLen *=2.54;
-			techSpeed *= 1.6; 
+			trkLen *=25.4; //mm/inch
+			techSpeed *= 1.6; //km/m
 		}
-		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RunTest\",\"TrackLen\":" + trkLen.toString() + ", \"Addr\":" + locoAddr.toString()+ ", \"VMax\":" + techSpeed.toString() + ", \"Mode\":" + stepMode.toString() + "}");
+//		console.log("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RunTest\",\"TrackLen\":" + trkLen.toString() + ", \"Addr\":" + locoAddr.toString()+ ", \"VMax\":" + techSpeed.toString() + ", \"POI\":[" + speedPOI.toString() + "]}");
+		ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RunTest\",\"TrackLen\":" + trkLen.toString() + ", \"Addr\":" + locoAddr.toString()+ ", \"VMax\":" + techSpeed.toString() + ", \"POI\":[" + speedPOI.toString() + "]}");
 	}
 }
 
@@ -718,6 +1174,10 @@ function abortSpeedTest(sender)
 function setTrackLength(sender)
 {
 	configData[workCfg].TrackLen = verifyNumber(sender.value, configData[workCfg].TrackLen); 
+	if (sender.id == "testtracklen")
+		writeInputField("ttracklen", configData[workCfg].TrackLen);
+	else
+		writeInputField("testtracklen", configData[workCfg].TrackLen);
 }
 
 function setTestSpeed(sender)
@@ -737,6 +1197,66 @@ function setTestSpeed(sender)
 		techSpeedProfileGraph.LineGraphs[2].ValsY[1] = yVal;
 		drawProfileBox(canvasElementTechSpeed, techSpeedProfileGraph);
 	}
+}
+
+function calcWheelSize(sender)
+{
+	if (Math.abs(relDist) < 20)
+		alert("Distance is too short to calculate diameter. Try again");
+	else
+	{
+		var newDist = parseFloat(readTextInputField("testdist"));
+		if (newDist != NaN)
+		{
+//			console.log(newDist, relDist, configData[loadCfg].WheelDia);
+			var newDia = Math.abs(newDist / relDist) * configData[loadCfg].WheelDia;
+			configData[workCfg].WheelDia = verifyNumber(newDia.toFixed(2), configData[loadCfg].WheelDia); 
+			writeInputField("wheelsize", configData[workCfg].WheelDia);
+		}
+		else
+			alert("Not a valid distance input");
+	}
+	closeWheelSize(sender);
+}
+
+function startWheelSize(sender)
+{
+	resetDistance(sender);
+	ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":500}");
+}
+
+function closeWheelSize(sender)
+{
+	if (wheelSizeDlg)
+		wheelSizeDlg.open = false;
+	ws.send("{\"Cmd\":\"SetSensor\", \"SubCmd\":\"RepRate\",\"Val\":0}");
+	document.getElementById("btnStart").innerHTML = "Start";
+	document.getElementById("btnStartLow").innerHTML = "Start";
+	document.getElementById("btnWheelStart").innerHTML = "Start";
+	document.getElementById("cbCurrSpeed").checked = false;
+}
+
+function measureWheelSize(sender)
+{
+	if (!wheelSizeDlg)
+	{
+		wheelSizeDlg = document.createElement("DIALOG");
+		tempObj = createEmptyDiv(wheelSizeDlg, "div", "tile-1_2", "");
+		createDispText(tempObj, "tile-1", "","Enter push distance, push car, then Submit","distext");
+		tempObj = createEmptyDiv(wheelSizeDlg, "div", "tile-1_2", "");
+		createTextInput(tempObj, "tile-1_4", "Push Distance [mm]:", "150", "testdist", "");
+//		writeInputField("testdist", 150);
+	
+		tempObj = createEmptyDiv(wheelSizeDlg, "div", "tile-1_2", "");
+		createButton(tempObj,  "", "Start", "btnSizeStart", "startWheelSize(this)");
+		createButton(tempObj,  "", "Cancel", "btnSizeCancel", "closeWheelSize(this)");
+		createButton(tempObj,  "", "Submit", "btnSizeOK", "calcWheelSize(this)");
+
+		document.body.appendChild(wheelSizeDlg);
+	}
+	wheelSizeDlg.open = true;
+
+	startWheelSize(sender);
 }
 
 function resetDistance(sender)
@@ -787,7 +1307,7 @@ function addEntryToArray(thisGraph, xData, yData, maxXSpan, hideData)
 		thisGraph.DataElements.splice(0,1);
 }
 
-
+/*
 var testObj =
 {
     "SlotNr": 3,
@@ -851,6 +1371,7 @@ var testObj =
         0
     ]
 }
+*/
 
 function addCV(cvNr, cvVal)
 {
@@ -875,6 +1396,7 @@ function progTable(sender)
 		if (confirm("Place locomotive on programming track and click OK") == false)
 			return;
 
+/*
 	if (thisIntfID == 17)
 	{
 		if (validLocoDef)
@@ -883,7 +1405,8 @@ function progTable(sender)
 			alert("Invalid Loco Definition. Please load JMRI file.");
 	}
 	else
-		initProg();
+*/
+		initProg(true);
 }
 
 function storeToJMRI(xmlNode)
@@ -929,137 +1452,394 @@ function storeToJMRI(xmlNode)
 	}
 }
 
-function initProg()
+function cancelProg()
 {
 	cvArray = [];
-	//program CVs 29 bit4, 67-94, 66, 95
-	//create CV Array
-	addCV(66, fwTrim); //set table use
-	addCV(95, bwTrim); //set table use
-	for (var i = 0; i < 28; i++)
-		addCV(i+67, speedTableProfileGraph.LineGraphs[0].DataElements[i].y);
-	addCV(29, findCVVal(locoDef, 29) | 0x10); //set table use
-	//write first CV 
-	cvId = cvArray[0].x;
-	cvVal = cvArray[0].y;
-	writeCV(null);
-	setTimeout(function(){progCVArray() }, 1000);
+	if (progDlg)
+		progDlg.open = false;
 }
+
+function initProg(writeAll)
+{
+	if (progStatus > 0)
+	{
+		if (!progDlg)
+		{
+			progDlg = document.createElement("DIALOG");
+			tempObj = createEmptyDiv(progDlg, "div", "tile-1", "");
+			createDispText(tempObj, "tile-1", "Programming in Progress. Please Wait","", "dlgprogtext");
+			tempObj = createEmptyDiv(progDlg, "div", "tile-1", "");
+			createDispText(tempObj, "tile-1_4", "Write CV #:","00", "dlgcvnum");
+			createDispText(tempObj, "tile-1_4", "with Value:","00","dlgcvval");
+			tempObj = createEmptyDiv(progDlg, "div", "tile-1", "");
+			createDispText(tempObj, "tile-1_4","Status:", "xx","dlgcvstat");
+			createDispText(tempObj, "tile-1_4","Command:", "yy","dlgcvcmd");
+	
+			tempObj = createEmptyDiv(progDlg, "div", "tile-1", "");
+			createButton(tempObj,  "", "Cancel", "btnSizeCancel", "cancelProg(this)");
+
+			document.body.appendChild(progDlg);
+		}
+		progDlg.open = true;
+		cvArray = [];
+		//program CVs 29 bit4, 67-94, 66, 95
+		//create CV Array
+		addCV(66, fwTrim); //set table use
+		addCV(95, bwTrim); //set table use
+		if (writeAll == true)
+		{
+			for (var i = 0; i < 28; i++)
+				addCV(i+67, speedTableProfileGraph.LineGraphs[0].DataElements[i+1].y);
+			if (validLocoDef)
+				addCV(29, findCVVal(locoDef, 29) | 0x10); //set table use
+			else
+				addCV(29, cvVal_29 | 0x10); //set table use
+		}
+		//write first CV 
+		cvId = cvArray[0].x;
+		cvVal = cvArray[0].y;
+		if (writeCV(null))
+		{
+			writeTextField("dlgcvnum", cvId.toString());
+			writeTextField("dlgcvval", cvVal.toString());
+			writeTextField("dlgcvstat", "");
+			writeTextField("dlgcvcmd", "Write CV");
+			progFailCtr = 0;
+			setTimeout(function(){progCVArray() }, (configData[workCfg].ProgMode > 0) ? 200 : 50);
+		}
+	}
+	else
+		alert("Programmer not available. Try again...");
+}
+
+/*
+var progStatus = 1; //0: busy 1: done with success 2: done with error
+var progRetCode = 0; //0: busy 
+* 							1: accepted, wait for answer 
+* 							2: timeout error 
+* 							3: success 
+* 							4: Prog track found empty
+* 							5: No Ack Pulse
+* 							6: Value not found
+* 							7: Task aborted by user
+* 							0x40: accepted blind 
+* 							0x7F: task not implemented
+var progLastCommand;
+*/
 
 function progCVArray()
 {
+//	console.log(progStatus);
 	//write rest of array 
-	cvArray.splice(0,1); //remove first element
-	if (cvArray.length > 0)
+	if (configData[nodeCfg].InterfaceTypeList[configData[nodeCfg].InterfaceIndex].IntfID == 18)
+		progStatus = 1;
+	if (progStatus > 0)
 	{
-		cvId = cvArray[0].x;
-		cvVal = cvArray[0].y;
-		writeCV(null);
-//		console.log("write ", cvId, cvVal);
-		setTimeout(function(){progCVArray() }, 500);
+		if (progStatus == 1) 
+		{
+			writeTextField("dlgcvstat", "Success");
+			cvArray.splice(0,1); //success, so remove first element
+			if (cvArray.length > 0)
+			{
+				cvId = cvArray[0].x;
+				cvVal = cvArray[0].y;
+				progLastCommand = Date.now();
+				if (!writeCV(null))
+				{
+					cancelProg();
+					return;
+				}
+				writeTextField("dlgcvnum", cvId.toString());
+				writeTextField("dlgcvval", cvVal.toString());
+				writeTextField("dlgcvcmd", "Write CV");
+				progFailCtr = 0;
+//				console.log(cvId, cvVal);
+			}
+			else
+			{
+				cancelProg();
+				return;
+			}
+		}
+		else
+		{
+//			console.log(progRetCode);
+			switch (progRetCode)
+			{
+				case 2: writeTextField("dlgcvstat", "Timeout error. Trying again..."); break;
+				case 4: writeTextField("dlgcvstat", "Prog track found empty. Trying again..."); break;
+				case 5: writeTextField("dlgcvstat", "No Ack Pulse received. Trying again..."); break;
+				case 6: writeTextField("dlgcvstat", "Value not found. Trying again..."); break;
+				case 7: writeTextField("dlgcvstat", "Task aborted by user. Terminating..."); cancelProg(); return;break;
+			}
+			progFailCtr++;
+			if (progFailCtr > 3)
+			{
+				if (confirm("Programming failed. Keep trying?") == true)
+					progFailCtr = 0;
+				else
+				{
+//					console.log("Cancel");
+					cancelProg();
+					return;
+				}
+			}
+		}
 	}
+	else
+		if ((Date.now() - progLastCommand) > 5000)
+		{
+			progStatus = 2;
+			progRetCode = 2;
+//			writeTextField("dlgcvstat", "Timeout. Trying again...");
+		}
+	setTimeout(function(){progCVArray() }, (configData[workCfg].ProgMode > 0) ? 200 : 50);
 }
 
 function calcTable(sender)
 {
 	if (validTechSpeedDef)
 	{
-		var avgDev = 0; //avg deviation between forward and backward
-		var avgVal = 0;
+		var avgDevfw = 0; //avg deviation between forward and backward
+		var avgDevbw = 0; //avg deviation between forward and backward
+		var avgVal = [0,0,0];
 		var maxVal = 0;
 		speedTableProfileGraph.LineGraphs[0].DataElements = [];
 		var newElement = JSON.parse(JSON.stringify(DataElementTemplate)); // = {"x":0,"y":0,"m":0};
 		newElement.x = 0;
 		newElement.y = 0;
 		speedTableProfileGraph.LineGraphs[0].DataElements.push(newElement);
-		for (var j = 0; j < 28; j++)
+		for (var j = 1; j < 29; j++)
 		{
 			var targetSpeed = getSpeedForThrottleStep(j);
 			var targetLevel = getMotorValueForSpeed(targetSpeed);
-//			console.log(targetLevel);
+//			console.log(targetSpeed, techSpeedProfileGraph.LineGraphs[1].DataElements[j].y, techSpeedProfileGraph.LineGraphs[2].DataElements[j].y, targetLevel);
+			avgVal[0] += targetLevel[0]; //
+			avgVal[1] += targetLevel[1];
+			avgVal[2] += Math.round((targetLevel[0] + targetLevel[1])/2); 
+		}
+		var topCurve = avgVal[0] < avgVal[1] ? 0 : 1; //higher target levels come from lower curve
+		var botCurve = avgVal[0] < avgVal[1] ? 1 : 0;
+
+//		console.log(avgVal, botCurve, topCurve);
+
+		for (var j = 1; j < 29; j++)
+		{
+			var targetSpeed = getSpeedForThrottleStep(j);
+			var targetLevel = getMotorValueForSpeed(targetSpeed);
 			newElement = JSON.parse(JSON.stringify(DataElementTemplate)); // = {"x":0,"y":0,"m":0};
-			newElement.x = j+1;
-			newElement.y = Math.round((targetLevel[0] + targetLevel[1])/2);
-			avgVal += newElement.y;
+			newElement.x = j;
+			switch (configData[workCfg].CalcMode)
+			{
+				case 0: //average of both curves
+					newElement.y = Math.round((targetLevel[0] + targetLevel[1])/2); 
+//					avgDevfw += (targetLevel[0] - targetLevel[1])/2; //add deviation between fw and bw for trim calculation
+					avgDevfw += newElement.y - targetLevel[0]; //add deviation between fw and bw for trim calculation
+					avgDevbw += newElement.y - targetLevel[1]; //add deviation between fw and bw for trim calculation
+					break;
+				case 1: //lower of both curves
+					newElement.y = (botCurve == 0) ? targetLevel[0] : targetLevel[1];
+//					avgDevfw += (targetLevel[topCurve] - targetLevel[botCurve]); //add deviation between fw and bw for trim calculation
+					avgDevfw += (topCurve == 1 ? targetLevel[0] : targetLevel[1]) - newElement.y;
+					avgDevbw += (topCurve == 0 ? targetLevel[0] : targetLevel[1]) - newElement.y;
+					break;
+				case 2: //higher of both curves
+					newElement.y = (topCurve == 0) ? targetLevel[0] : targetLevel[1];
+//					avgDevfw += (targetLevel[botCurve] - targetLevel[topCurve]); //add deviation between fw and bw for trim calculation
+					avgDevfw += (botCurve == 0 ? targetLevel[0] : targetLevel[1]) - newElement.y;
+					avgDevbw += (botCurve == 1 ? targetLevel[0] : targetLevel[1]) - newElement.y;
+					break;
+			}
 			if (newElement.y > maxVal)
 				maxVal = newElement.y;
-			avgDev += targetLevel[0] - targetLevel[1]; //add deviation between fw and bw for trim calculation
 //			console.log(targetLevel[0], targetLevel[1], newElement.y, targetLevel[0] - targetLevel[1], avgDev);
 			speedTableProfileGraph.LineGraphs[0].DataElements.push(newElement);
 		}
-		avgDev = Math.round(avgDev/28);
-		avgVal = Math.round(avgVal/28);
-		var trimRatio = (Math.abs(avgDev) + avgVal) / avgVal;
-		if (trimMode == 0) //0-200%
+		avgDevfw = avgDevfw/28;
+		avgDevbw = avgDevbw/28;
+		avgVal[0] = avgVal[0]/28;
+		avgVal[1] = avgVal[1]/28;
+		avgVal[2] = avgVal[2]/28;
+
+		console.log(avgDevfw, avgDevbw, avgVal);
+
+		var trimRatio;
+		switch (configData[workCfg].CalcMode)
 		{
-			fwTrim = avgDev > 0 ? Math.round(128 * trimRatio) : 128;
-			bwTrim = avgDev < 0 ? Math.round(128 * trimRatio) : 128;
+			case 0: //average of both curves
+				trimRatio = ((Math.abs(avgDevfw) + avgVal[2]) / avgVal[2]);
+				break;
+			case 1: //lower of both curves
+				trimRatio = (((botCurve == 1) ? avgDevfw : avgDevbw ) + avgVal[botCurve]) / avgVal[botCurve];
+				break;
+			case 2: //higher of both curves
+				trimRatio = (((topCurve == 1) ? avgDevfw : avgDevbw ) + avgVal[topCurve]) / avgVal[topCurve];
+				break;
 		}
-		else //0-100%, disable Trim Values
+		
+		console.log(configData[workCfg].CalcMode, configData[workCfg].TrimMode, trimReserve, trimRatio);
+
+		var trimBase = 128;
+		if (configData[workCfg].TrimMode == 1) //0-100%
 		{
 			if ((maxVal * trimRatio) <= 255)
-			{
-				for (var j = 0; j < 28; j++)
-					speedTableProfileGraph.LineGraphs[0].DataElements[j].y = Math.round(speedTableProfileGraph.LineGraphs[0].DataElements[j].y * trimRatio); //increase table values
-				fwTrim = avgDev > 0 ? 255 : Math.round(255 / trimRatio);
-				bwTrim = avgDev < 0 ? 255 : Math.round(255 / trimRatio);
-			}
-			else //don't change anything, spoeed scale is maxed out
-			{
-				fwTrim = 0;
-				bwTrim = 0;
-			}
+				for (var j = 0; j < 29; j++)
+					speedTableProfileGraph.LineGraphs[0].DataElements[j].y = Math.round(speedTableProfileGraph.LineGraphs[0].DataElements[j].y * (1 + (trimReserve/100))); //increase table values by % to make down trimmable
+			trimBase = Math.round(255 /(1 + (trimReserve/100)));
 		}
+		else
+			for (var j = 0; j < 29; j++)
+				speedTableProfileGraph.LineGraphs[0].DataElements[j].y = Math.round(speedTableProfileGraph.LineGraphs[0].DataElements[j].y); //round to integer
+		switch (configData[workCfg].CalcMode)
+		{
+			case 0: //average
+				fwTrim = Math.round((topCurve == 0) ? trimBase / trimRatio : trimBase * trimRatio);
+				bwTrim = Math.round((topCurve == 1) ? trimBase / trimRatio : trimBase * trimRatio);
+				break;
+			case 1: //lower curve
+				bwTrim = Math.round((topCurve == 0) ? trimBase : trimBase * trimRatio);
+				fwTrim = Math.round((topCurve == 1) ? trimBase : trimBase * trimRatio);
+				break;
+			case 2: //higher curve
+				bwTrim = Math.round((topCurve == 0) ? trimBase * trimRatio : trimBase);
+				fwTrim = Math.round((topCurve == 1) ? trimBase * trimRatio : trimBase);
+				break;
+		}
+		fwTrim = Math.min(255, fwTrim);
+		bwTrim = Math.min(255, bwTrim);
+		
 		writeInputField("fwtrim", fwTrim);
 		writeInputField("bwtrim", bwTrim);
+		writeInputField("fwtrimadj", fwTrim);
+		writeInputField("bwtrimadj", bwTrim);
 		drawProfileBox(canvasElementSpeedTable, speedTableProfileGraph);
 		validTableDef = true;
 	}
+	if (validLocoDef)
+		storeToJMRI(locoDef);
 	setButtonStatus();
 }
 
+/*
+var progStatus = 1; //0: busy 1: done with success 2: done with error
+var progRetCode = 0; //0: busy 
+* 							1: accepted, wait for answer 
+* 							2: timeout error 
+* 							3: success 
+* 							4: Prog track found empty
+* 							5: No Ack Pulse
+* 							6: Value not found
+* 							7: Task aborted by user
+* 							0x40: accepted blind 
+* 							0x7F: task not implemented
+var progLastCommand;
+*/
+
 function processProgrammerInput(jsonData)
 {
-	switch (jsonData.Status)
+//	console.log(jsonData);
+	var statMsg = "";
+	switch (jsonData.Mode)
 	{
-		case 0:
-			writeTextField("progstat", "Success");
-			writeInputField("cvid", jsonData.CVNr);
-			writeInputField("cvval", jsonData.CVVal);
-			switch (jsonData.CVNr)
+		case 0x00: progStatus = 0; progRetCode = 0; statMsg = "Programmer busy"; break; //prog busy
+		case 0x01: progStatus = 0; progRetCode = 1; statMsg = "Processing..."; break; //working on it
+		case 0x40: progStatus = 1; progRetCode = 0x40; statMsg = "Task accepted, no reply"; break; //accepted blind
+		case 0x7F: progStatus = 2; progRetCode = 0x7F; statMsg = "Function not implemented"; break; //not implemented
+		case 0xFF: //Final prog status reply
+		{
+			switch (jsonData.Status)
 			{
-				case 2:
-					writeInputField("cvn02", jsonData.CVVal);
-					writeTextField("cv02", jsonData.CVVal);
+				case 0:
+					progStatus = 1;
+					progRetCode = 3;
+					statMsg = "Success";
+					writeInputField("cvid", jsonData.CVNr);
+					writeInputField("cvval", jsonData.CVVal);
+					switch (jsonData.CVNr)
+					{
+						case 2:
+							writeInputField("cvn02", jsonData.CVVal);
+							writeTextField("cv02", jsonData.CVVal);
+							break;
+						case 5:
+							writeInputField("cvn05", jsonData.CVVal);
+							writeTextField("cv05", jsonData.CVVal);
+							break;
+						case 6:
+							writeInputField("cvn06", jsonData.CVVal);
+							writeTextField("cv06", jsonData.CVVal);
+							break;
+						case 29:
+							writeInputField("cvn29", jsonData.CVVal);
+							writeTextField("cv29", jsonData.CVVal);
+							break;
+					}
 					break;
-				case 5:
-					writeInputField("cvn05", jsonData.CVVal);
-					writeTextField("cv05", jsonData.CVVal);
-					break;
-				case 6:
-					writeInputField("cvn06", jsonData.CVVal);
-					writeTextField("cv06", jsonData.CVVal);
-					break;
-				case 29:
-					writeInputField("cvn29", jsonData.CVVal);
-					writeTextField("cv29", jsonData.CVVal);
+				default:
+					if (jsonData.Status & 0x01)	statMsg += "Prog track found empty ";
+					if (jsonData.Status & 0x01) progRetCode = 4;
+					if (jsonData.Status & 0x02)	statMsg += "No Ack Pulse ";
+					if (jsonData.Status & 0x02) progRetCode = 5;
+					if (jsonData.Status & 0x04)	statMsg += "Value not found ";
+					if (jsonData.Status & 0x04) progRetCode = 6;
+					if (jsonData.Status & 0x08)	statMsg += "Task aborted by user";
+					if (jsonData.Status & 0x08) progRetCode = 7;
+					progStatus = 2;
 					break;
 			}
-			break;
-		default:
-			var msgStr;
-			if (jsonData.Status & 0x01)	msgStr += "Prog track empty. ";
-			if (jsonData.Status & 0x02)	msgStr += "No Ack. ";
-			if (jsonData.Status & 0x04)	msgStr += "Value not found. ";
-			if (jsonData.Status & 0x08)	msgStr += "User aborted.";
-			writeTextField("progstat", msgStr);
-			break;
+		}
 	}
+	writeTextField("progstat", statMsg);
 }
 
-function processSpeedTableInput(jsonData)
+function fillZeros(speedData)
 {
-	console.log(jsonData);
+	//step 1: replace zero values by data
+	var lastElement = speedData.length-1;
+	while (speedData[lastElement] == 0)
+		lastElement--;
+	var zeroPtr = lastElement;
+	var curveEnd = lastElement;
+	while (zeroPtr > 0)
+	{
+		zeroPtr--;
+		if (speedData[zeroPtr] != 0)
+			lastElement--;
+		else
+		{
+			while ((zeroPtr > 0) && (speedData[zeroPtr] == 0))
+				zeroPtr--;
+			var dx = lastElement - zeroPtr;
+			var dy = (speedData[lastElement] - speedData[zeroPtr])	/ dx;
+			for (var i = 1; i < dx; i++)
+				speedData[zeroPtr+ i] = speedData[zeroPtr] + (i * dy);
+			lastElement = zeroPtr;
+		}
+	}	
+	//step 2: make curve strictly monotone up to the end point
+	for (var i = 1; i < speedData.length; i++)
+		if (speedData[i] < speedData[i-1])
+			speedData[i] = speedData[i-1];
+	
+	//step 3: linear smoothing
+//	lastElement = speedData.length-1;
+//	while (speedData[lastElement] == 0)
+//		lastElement--;
+	for (var i = 1; i < curveEnd; i++)
+		speedData[i] = (speedData[i-1] + speedData[i+1])/2;
+//	console.log(speedData);
+	return speedData;
+}
+
+function processSpeedTableInput(jsonData, processCurve)
+{
+//	console.log(jsonData);
+
+	if (processCurve)
+	{
+		jsonData.fw = fillZeros(jsonData.fw);
+		jsonData.bw = fillZeros(jsonData.bw);
+	}
 	for (var j = 1; j < techSpeedProfileGraph.LineGraphs.length; j++)
 	{
 		techSpeedProfileGraph.LineGraphs[j].DataElements = [];
@@ -1073,38 +1853,134 @@ function processSpeedTableInput(jsonData)
 	}
 	validTechSpeedDef = true;
 	drawProfileBox(canvasElementTechSpeed, techSpeedProfileGraph);
+	if (jsonData.testError > 0)
+	{
+		//add code to display error flags
+	}
 	if (jsonData.final != undefined)
+	{
 		calcTable();
+		speedProfileDef.GraphData = JSON.parse(JSON.stringify(jsonData));
+	}
+	else
+		validTableDef = false;
+	setButtonStatus();
+	if ((jsonData.SlotNr > 0) && (!jsonData.final))
+	{
+		var speedVal = jsonData.CurrStep;
+		switch (speedVal)
+		{
+			case 0 : speedVal = 1; break;
+			case 1 : speedVal = 0; break;
+		}
+		writeTextField("dccstepsp", speedVal.toString() + " " + (jsonData.Dir? "FW" : "BW"));
+	}
+	else
+		writeTextField("dccstepsp", "");
 //	console.log(speedTableProfileGraph);
 }
 
 function processSensorInput(jsonData)
 {
-	console.log(jsonData);
-
-	var dirStr = jsonData.Speed > 0 ? " Forward" : jsonData.Speed < 0 ? " Backward" : "";
-	writeTextField("speed", Math.abs(jsonData.Speed).toFixed(2) + dirStr);
-
-	var currScale = configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale;
+//	console.log(jsonData);
+	var speedUpdate = jsonData.RR >= 500;
 	
-    var scaleSpeed = (jsonData.Speed  * 36 * currScale) / 10000; //[km/h]
-    if (configData[workCfg].Units == 1) //imperial
-		scaleSpeed /= 1.6;
-	writeTextField("scalespeed", Math.abs(scaleSpeed.toFixed(2)));
-	writeTextField("absdist", configData[workCfg].Units == 0 ? (jsonData.AbsDist/10).toFixed(2) : (jsonData.AbsDist/25.4).toFixed(2));
-	writeTextField("reldist", configData[workCfg].Units == 0 ? (jsonData.RelDist/10).toFixed(2) : (jsonData.RelDist/25.4).toFixed(2));
-
-	var radiusVal = Math.min(5000, configData[workCfg].Units == 0 ? Math.abs(jsonData.Radius) : Math.abs(jsonData.Radius)/25.4);
-	var radiusValGraph = radiusVal > 2000 ? 0 : radiusVal;
-	var radiusSig = jsonData.Radius >= 0 ? 1 : -1; 
-	var radiusStr = radiusVal.toFixed(2);
-	if ((jsonData.Radius != 0) && (Math.abs(jsonData.Radius) < 5000))
-		dirStr = radiusStr + ((radiusSig > 0) ? " right" : " left");
-	else
-		dirStr = " straight";
-
-	if (jsonData.EulerVect != undefined)
+	if (!speedUpdate)
 	{
+		if (analysisBuffer.length < 20)
+			analysisBuffer.push(jsonData.Speed);
+		else
+			analysisBuffer[analysisIndex] = jsonData.Speed;
+		var tempIndex = analysisIndex;
+		var valSum = 0;
+		var val1Sec = 0;
+		var val5Sec = 0;
+		var val10Sec = 0;
+		analysisIndex = (analysisIndex + 1) % 20; //5 seconds @ 250ms
+		for (var i = 0; i < analysisBuffer.length; i++)
+		{
+			valSum += analysisBuffer[tempIndex];
+			tempIndex = (tempIndex + 19) % 20;
+			if (i == 0)
+				val1Sec = valSum; //0.25sec
+			if (i == 3)
+				val5Sec = valSum / 4; //1sec
+			if (i == 19)
+				val10Sec = valSum / 20; //5sec
+		}
+//		console.log(analysisBuffer.length, valSum, val1Sec, val5Sec, val10Sec);
+		addEntryToArray(lineGraphStab1, jsonData.TS, val1Sec, stabilityGraph.MaxXRange * 1000);
+		addEntryToArray(lineGraphStab2, jsonData.TS, val5Sec, stabilityGraph.MaxXRange * 1000);
+		addEntryToArray(lineGraphStab3, jsonData.TS, val10Sec, stabilityGraph.MaxXRange * 1000);
+		drawStabilityGraphs();
+//		console.log(throttleProfileGraph.SpeedGraph);
+		var speedMultiplier = 0.0036 * configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale; //mm/s to km/h * scale
+		if (configData[workCfg].Units == 1) //imperial
+			speedMultiplier /= 1.6; //km/h to mph
+		if (jsonData.SpeedStep != undefined)
+		{
+			if ((throttleProfileGraph.SpeedGraph.x != Math.max(0, (Math.round(jsonData.SpeedStep-1) / 128 * throttleDef.SpeedSteps))) || (throttleProfileGraph.SpeedGraph.evtCtr >= 20))
+			{
+				throttleProfileGraph.SpeedGraph.evtCtr = 0;
+				throttleProfileGraph.SpeedGraph.Min1y = Math.abs(val1Sec * speedMultiplier);
+				throttleProfileGraph.SpeedGraph.Max1y = Math.abs(val1Sec * speedMultiplier);
+				throttleProfileGraph.SpeedGraph.Min2y = Math.abs(val5Sec * speedMultiplier);
+				throttleProfileGraph.SpeedGraph.Max2y = Math.abs(val5Sec * speedMultiplier);
+				throttleProfileGraph.SpeedGraph.Min3y = Math.abs(val10Sec * speedMultiplier);
+				throttleProfileGraph.SpeedGraph.Max3y = Math.abs(val10Sec * speedMultiplier);
+			}
+			else
+			{
+				throttleProfileGraph.SpeedGraph.Min1y = Math.min(throttleProfileGraph.SpeedGraph.Min1y, Math.abs(val1Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.Max1y = Math.max(throttleProfileGraph.SpeedGraph.Max1y, Math.abs(val1Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.Min2y = Math.min(throttleProfileGraph.SpeedGraph.Min2y, Math.abs(val5Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.Max2y = Math.max(throttleProfileGraph.SpeedGraph.Max2y, Math.abs(val5Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.Min3y = Math.min(throttleProfileGraph.SpeedGraph.Min3y, Math.abs(val10Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.Max3y = Math.max(throttleProfileGraph.SpeedGraph.Max3y, Math.abs(val10Sec * speedMultiplier));
+				throttleProfileGraph.SpeedGraph.evtCtr++;
+			}
+			throttleProfileGraph.SpeedGraph.x = Math.max(0, (Math.round(jsonData.SpeedStep-1) / 128 * throttleDef.SpeedSteps));
+			throttleProfileGraph.SpeedGraph.m = jsonData.SpeedStep > 1 ? 0 : 1;
+			throttleProfileGraph.SpeedGraph.Last1y = Math.abs(val1Sec * speedMultiplier);
+			throttleProfileGraph.SpeedGraph.Last2y = Math.abs(val5Sec * speedMultiplier);
+			throttleProfileGraph.SpeedGraph.Last3y = Math.abs(val10Sec * speedMultiplier);
+		}
+		else
+			throttleProfileGraph.SpeedGraph.m = 1;
+//		console.log(throttleProfileGraph.SpeedGraph);
+		drawProfileBox(canvasElementThrottle, throttleProfileGraph);
+
+	}
+	else
+	{
+
+		var currScale = configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale;
+		var scaleSpeed = (jsonData.Speed  * 36 * currScale) / 10000; //[km/h]
+		loadSpeedDispTable(speedDistTable, jsonData);
+		loadElevPitchTable(elevPitchTable, jsonData);
+/*
+		var dirStr = jsonData.Speed > 0 ? " Forward" : jsonData.Speed < 0 ? " Backward" : "";
+		writeTextField("speed", Math.abs(jsonData.Speed).toFixed(2) + dirStr);
+
+		var currScale = configData[workCfg].ScaleList[configData[workCfg].ScaleIndex].Scale;
+	
+		var scaleSpeed = (jsonData.Speed  * 36 * currScale) / 10000; //[km/h]
+		if (configData[workCfg].Units == 1) //imperial
+			scaleSpeed /= 1.6; //mph
+		writeTextField("scalespeed", Math.abs(scaleSpeed.toFixed(2)));
+		writeTextField("absdist", configData[workCfg].Units == 0 ? (jsonData.AbsDist/10).toFixed(2) : (jsonData.AbsDist/25.4).toFixed(2));
+		relDist = jsonData.RelDist;
+		writeTextField("reldist", configData[workCfg].Units == 0 ? (jsonData.RelDist/10).toFixed(2) : (jsonData.RelDist/25.4).toFixed(2));
+
+		var radiusVal = Math.min(5000, configData[workCfg].Units == 0 ? Math.abs(jsonData.Radius) : Math.abs(jsonData.Radius)/25.4);
+		var radiusValGraph = radiusVal > 2000 ? 0 : radiusVal;
+		var radiusSig = jsonData.Radius >= 0 ? 1 : -1; 
+		var radiusStr = radiusVal.toFixed(2);
+		if ((jsonData.Radius != 0) && (Math.abs(jsonData.Radius) < 5000))
+			dirStr = radiusStr + ((radiusSig > 0) ? " right" : " left");
+		else
+			dirStr = " straight";
+
 		writeTextField("radius", dirStr);
 		writeTextField("heading", (180 * jsonData.EulerVect[0] / 3.1415).toFixed(2));
 		if (jsonData.Banking)
@@ -1115,20 +1991,33 @@ function processSensorInput(jsonData)
 			writeTextField("pitch", jsonData.Slope.toFixed(1)); //(180 * jsonData.EulerVect[2] / 3.1415).toFixed(2));
 		else
 			writeTextField("pitch", "n/a"); //(180 * jsonData.EulerVect[2] / 3.1415).toFixed(2));
-		addEntryToArray(lineGraphHeading, jsonData.TS , ((180 * jsonData.EulerVect[0]) / 3.1415), speedGraph.MaxXRange * 1000);
-		addEntryToArray(lineGraphGrade, jsonData.TS , ((180 * jsonData.EulerVect[2]) / 3.1415), speedGraph.MaxXRange * 1000);
-		addEntryToArray(lineGraphElevation, jsonData.TS , ((180 * jsonData.EulerVect[1]) / 3.1415), speedGraph.MaxXRange * 1000);
-		addEntryToArray(lineGraphRadius, jsonData.TS , radiusSig * radiusValGraph, speedGraph.MaxXRange * 1000, radiusValGraph == 0);
-	}
-	addEntryToArray(lineGraphTechSpeed, jsonData.TS , jsonData.Speed, speedGraph.MaxXRange * 1000);
 
-	addEntryToArray(lineGraphScaleSpeed, jsonData.TS , scaleSpeed, speedGraph.MaxXRange * 1000);
-	
+//		if (jsonData.EulerVect == [0, 0, 0, 0])
+		{
+			addEntryToArray(lineGraphGrade, jsonData.TS, jsonData.Slope, angleGraph.MaxXRange * 1000);
+			addEntryToArray(lineGraphElevation, jsonData.TS, jsonData.Banking, angleGraph.MaxXRange * 1000);
+		}
+*/
+
+/*
+		else
+		{
+			addEntryToArray(lineGraphHeading, jsonData.TS , ((180 * jsonData.EulerVect[0]) / 3.1415), radiusGraph.MaxXRange * 1000);
+			addEntryToArray(lineGraphGrade, jsonData.TS , ((180 * jsonData.EulerVect[2]) / 3.1415), angleGraph.MaxXRange * 1000);
+			addEntryToArray(lineGraphElevation, jsonData.TS , ((180 * jsonData.EulerVect[1]) / 3.1415), angleGraph.MaxXRange * 1000);
+			addEntryToArray(lineGraphRadius, jsonData.TS , radiusSig * radiusValGraph, radiusGraph.MaxXRange * 1000, radiusValGraph == 0);
+		}
+*/
+		addEntryToArray(lineGraphTechSpeed, jsonData.TS , jsonData.Speed, speedGraph.MaxXRange * 1000);
+		addEntryToArray(lineGraphScaleSpeed, jsonData.TS , scaleSpeed, speedGraph.MaxXRange * 1000);
+		drawLineGraphs();
+	}
 	if (jsonData.DCCAddr != undefined)
 	{
 		writeTextField("dccaddr", jsonData.DCCAddr);
 		writeTextField("dccaddrsp", jsonData.DCCAddr);
 		writeTextField("dccaddrtbl", jsonData.DCCAddr);
+		writeTextField("dccwheeladdr", jsonData.DCCAddr);
 		
 		locoAddr = jsonData.DCCAddr;
 		if ((jsonData.DCCAddr != undefined) && (jsonData.DirF != undefined) && locoAddrValid)
@@ -1142,12 +2031,14 @@ function processSensorInput(jsonData)
 			var speedStr = jsonData.SpeedStep.toString();
 			var dirStr =((jsonData.DirF & 0x20) > 0) ? " forward" : " backward";
 			writeTextField("dccstep", speedStr + " " + dirStr);
+			writeTextField("dccwheelstep", speedStr + " " + dirStr);
 //			writeTextField("dccstepsp", speedStr + " " + dirStr);
 			addEntryToArray(lineGraphSpeedStep, jsonData.TS , ((jsonData.DirF & 0x20) > 0) ? jsonData.SpeedStep : -1 * jsonData.SpeedStep, speedGraph.MaxXRange * 1000);
 		}
 		else
 		{
 			writeTextField("dccstep", "n/a");
+			writeTextField("dccwheelstep", "n/a");
 //			writeTextField("dccstepsp", "n/a");
 		}
 		locoAddrValid = true;
@@ -1156,12 +2047,12 @@ function processSensorInput(jsonData)
 	{
 //		writeTextField("dccaddr", "n/a");
 		writeTextField("dccstep", "n/a");
+		writeTextField("dccwheelstep", "n/a");
 //		writeTextField("dccstepsp", "n/a");
 		locoAddr -1;
 		locoAddrValid = false;
 	}
 
-	drawLineGraphs();
 	setButtonStatus();
 }
 

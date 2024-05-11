@@ -45,6 +45,8 @@ topicList * clientTopics = NULL;
 bool convertMQTTtoLN(lnReceiveBuffer* recData, char* topic, byte* payload, unsigned int length, topicList * myTopics, bool acceptLoop)
 {
 	DynamicJsonDocument doc(4 * length);
+//	Serial.println((char*)payload);
+//	Serial.println(myTopics->thisNodeName);
 	DeserializationError error = deserializeJson(doc, payload);
 	if (!error)
 	{
@@ -74,7 +76,7 @@ bool convertMQTTtoLN(lnReceiveBuffer* recData, char* topic, byte* payload, unsig
 						recData->requestID = (uint16_t) doc["ReqID"];
 					else
 						recData->requestID = 0;
-					recData->requestID &= 0xF0FF; //clear any bits in the routing space
+//					recData->requestID &= 0xF0FF; //clear any bits in the routing space
 					if (doc.containsKey("ReqRespTime"))
 						recData->reqRespTime = doc["ReqRespTime"];
 					else
@@ -160,6 +162,8 @@ MQTTESP32::MQTTESP32(Client& client):PubSubClient(client)
 void MQTTESP32::initializeMQTT(uint8_t newMode)
 {
 	Serial.printf("Init MQTT %i \n", newMode);
+    if (MQTT_MAX_PACKET_SIZE < 512)
+		setBufferSize(512);
 	workMode = newMode; // //0: LN Gateway; 1: DCC Client; 2: NativeMQTT; 3: LN Client; 4: DCC Server
 	switch (workMode)
 	{
@@ -390,7 +394,13 @@ bool MQTTESP32::sendMQTTMessage(lnReceiveBuffer txData)
     doc["ReqRecTime"] = txData.reqRecTime;
     doc["ReqRespTime"] = txData.reqRespTime;
     doc["EchoTime"] = txData.echoTime;
-    doc["ReqID"] = txData.requestID & 0x00FF; //clear routing flags --- needs more work
+    txData.requestID &= 0x00FF; //clear routing flags --- needs more work
+    switch (workMode)
+    {
+		case 0: txData.requestID |= fromMQTTGW; break;
+		case 3: txData.requestID |= dirUpstream; break;
+	}
+    doc["ReqID"] = txData.requestID; 
     doc["ErrorFlags"] = txData.errorFlags;
     switch (txData.msgType)
     {
@@ -408,7 +418,11 @@ bool MQTTESP32::sendMQTTMessage(lnReceiveBuffer txData)
 		case 1: byte i = 0;
 				while (i < lnMaxMsgSize)
 				{
-					data.add(char(txData.lnData[i]));
+//to be verified with LCB device
+					uint8_t dtEl = char(txData.lnData[i]);
+					data.add(dtEl);
+//					data.add(txData.lnData[i]);
+//					data.add(char(txData.lnData[i]));
 					if (char(txData.lnData[i]) == ';')
 						break;
 					i++;

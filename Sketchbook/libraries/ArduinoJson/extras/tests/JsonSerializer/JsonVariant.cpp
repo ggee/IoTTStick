@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2022, Benoit BLANCHON
+// Copyright © 2014-2024, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -7,8 +7,8 @@
 #include <limits>
 
 template <typename T>
-void check(T value, const std::string &expected) {
-  DynamicJsonDocument doc(4096);
+void check(T value, const std::string& expected) {
+  JsonDocument doc;
   doc.to<JsonVariant>().set(value);
   char buffer[256] = "";
   size_t returnValue = serializeJson(doc, buffer, sizeof(buffer));
@@ -22,7 +22,7 @@ TEST_CASE("serializeJson(JsonVariant)") {
   }
 
   SECTION("Null string") {
-    check(static_cast<char *>(0), "null");
+    check(static_cast<char*>(0), "null");
   }
 
   SECTION("const char*") {

@@ -1,5 +1,5 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2022, Benoit BLANCHON
+// Copyright © 2014-2024, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
@@ -8,7 +8,7 @@
 template <typename T>
 static void checkVariant(T value, const char* expected_data,
                          size_t expected_len) {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
   JsonVariant variant = doc.to<JsonVariant>();
   variant.set(value);
   std::string expected(expected_data, expected_data + expected_len);
@@ -109,6 +109,7 @@ TEST_CASE("serialize MsgPack value") {
 
   SECTION("float 32") {
     checkVariant(1.25, "\xCA\x3F\xA0\x00\x00");
+    checkVariant(9.22337204e+18f, "\xca\x5f\x00\x00\x00");
   }
 
   SECTION("float 64") {

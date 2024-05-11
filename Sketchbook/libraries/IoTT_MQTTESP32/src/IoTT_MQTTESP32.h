@@ -118,9 +118,9 @@ private:
 //this is the callback function. Provide a function of this name and parameter in your application and it will be called when a new message is received
 //extern void onMQTTMessage(lnReceiveBuffer * recData) __attribute__ ((weak));
 
-extern uint16_t sendMsg(lnTransmitMsg txData);
-extern void callbackLocoNetMessage(lnReceiveBuffer * newData);
-extern void dccClientCallback(char* topic, byte *  payload, unsigned int length);
-extern void nativeClientCallback(char* topic, byte *  payload, unsigned int length);
+extern uint16_t sendMsg(lnTransmitMsg txData) __attribute__ ((weak));
+extern void callbackLocoNetMessage(lnReceiveBuffer * newData) __attribute__ ((weak));
+extern void dccClientCallback(char* topic, byte *  payload, unsigned int length) __attribute__ ((weak));
+extern void nativeClientCallback(char* topic, byte *  payload, unsigned int length) __attribute__ ((weak));
 
 #endif

@@ -1,15 +1,24 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2022, Benoit BLANCHON
+// Copyright © 2014-2024, Benoit BLANCHON
 // MIT License
 
+#define ARDUINOJSON_ENABLE_ARDUINO_STRING 1
+#define ARDUINOJSON_ENABLE_PROGMEM 1
 #include <ArduinoJson.h>
+
 #include <catch.hpp>
 
-using namespace ARDUINOJSON_NAMESPACE;
+#include "Allocators.hpp"
+
+using ArduinoJson::detail::sizeofArray;
+using ArduinoJson::detail::sizeofObject;
+
+typedef ArduinoJson::detail::MemberProxy<JsonDocument&, const char*>
+    MemberProxy;
 
 TEST_CASE("MemberProxy::add()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("add(int)") {
     mp.add(42);
@@ -25,8 +34,8 @@ TEST_CASE("MemberProxy::add()") {
 }
 
 TEST_CASE("MemberProxy::clear()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("size goes back to zero") {
     mp.add(42);
@@ -44,7 +53,7 @@ TEST_CASE("MemberProxy::clear()") {
 }
 
 TEST_CASE("MemberProxy::operator==()") {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
 
   SECTION("1 vs 1") {
     doc["a"] = 1;
@@ -84,8 +93,8 @@ TEST_CASE("MemberProxy::operator==()") {
 }
 
 TEST_CASE("MemberProxy::containsKey()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("containsKey(const char*)") {
     mp["key"] = "value";
@@ -103,7 +112,7 @@ TEST_CASE("MemberProxy::containsKey()") {
 }
 
 TEST_CASE("MemberProxy::operator|()") {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
 
   SECTION("const char*") {
     doc["a"] = "hello";
@@ -115,9 +124,9 @@ TEST_CASE("MemberProxy::operator|()") {
   SECTION("Issue #1411") {
     doc["sensor"] = "gps";
 
-    const char *test = "test";  // <- the literal must be captured in a variable
+    const char* test = "test";  // <- the literal must be captured in a variable
                                 // to trigger the bug
-    const char *sensor = doc["sensor"] | test;  // "gps"
+    const char* sensor = doc["sensor"] | test;  // "gps"
 
     REQUIRE(sensor == std::string("gps"));
   }
@@ -126,7 +135,7 @@ TEST_CASE("MemberProxy::operator|()") {
     JsonObject object = doc.to<JsonObject>();
     object["hello"] = "world";
 
-    StaticJsonDocument<0> emptyDoc;
+    JsonDocument emptyDoc;
     JsonObject anotherObject = object["hello"] | emptyDoc.to<JsonObject>();
 
     REQUIRE(anotherObject.isNull() == false);
@@ -135,8 +144,8 @@ TEST_CASE("MemberProxy::operator|()") {
 }
 
 TEST_CASE("MemberProxy::remove()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("remove(int)") {
     mp.add(1);
@@ -182,8 +191,8 @@ TEST_CASE("MemberProxy::remove()") {
 }
 
 TEST_CASE("MemberProxy::set()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("set(int)") {
     mp.set(42);
@@ -207,8 +216,8 @@ TEST_CASE("MemberProxy::set()") {
 }
 
 TEST_CASE("MemberProxy::size()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("returns 0") {
     REQUIRE(mp.size() == 0);
@@ -229,23 +238,9 @@ TEST_CASE("MemberProxy::size()") {
   }
 }
 
-TEST_CASE("MemberProxy::memoryUsage()") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
-
-  SECTION("returns 0 when null") {
-    REQUIRE(mp.memoryUsage() == 0);
-  }
-
-  SECTION("return the size for a string") {
-    mp.set(std::string("hello"));
-    REQUIRE(mp.memoryUsage() == 6);
-  }
-}
-
 TEST_CASE("MemberProxy::operator[]") {
-  DynamicJsonDocument doc(4096);
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  JsonDocument doc;
+  MemberProxy mp = doc["hello"];
 
   SECTION("set member") {
     mp["world"] = 42;
@@ -261,10 +256,10 @@ TEST_CASE("MemberProxy::operator[]") {
 }
 
 TEST_CASE("MemberProxy cast to JsonVariantConst") {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
   doc["hello"] = "world";
 
-  const MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  const MemberProxy mp = doc["hello"];
 
   JsonVariantConst var = mp;
 
@@ -272,10 +267,10 @@ TEST_CASE("MemberProxy cast to JsonVariantConst") {
 }
 
 TEST_CASE("MemberProxy cast to JsonVariant") {
-  DynamicJsonDocument doc(4096);
+  JsonDocument doc;
   doc["hello"] = "world";
 
-  MemberProxy<JsonDocument &, const char *> mp = doc["hello"];
+  MemberProxy mp = doc["hello"];
 
   JsonVariant var = mp;
 
@@ -284,4 +279,85 @@ TEST_CASE("MemberProxy cast to JsonVariant") {
   var.set("toto");
 
   CHECK(doc.as<std::string>() == "{\"hello\":\"toto\"}");
+}
+
+TEST_CASE("Deduplicate keys") {
+  SpyingAllocator spy;
+  JsonDocument doc(&spy);
+
+  SECTION("std::string") {
+    doc[0][std::string("example")] = 1;
+    doc[1][std::string("example")] = 2;
+
+    const char* key1 = doc[0].as<JsonObject>().begin()->key().c_str();
+    const char* key2 = doc[1].as<JsonObject>().begin()->key().c_str();
+    CHECK(key1 == key2);
+
+    REQUIRE(spy.log() == AllocatorLog{
+                             Allocate(sizeofPool()),
+                             Allocate(sizeofString("example")),
+                         });
+  }
+
+  SECTION("char*") {
+    char key[] = "example";
+    doc[0][key] = 1;
+    doc[1][key] = 2;
+
+    const char* key1 = doc[0].as<JsonObject>().begin()->key().c_str();
+    const char* key2 = doc[1].as<JsonObject>().begin()->key().c_str();
+    CHECK(key1 == key2);
+
+    REQUIRE(spy.log() == AllocatorLog{
+                             Allocate(sizeofPool()),
+                             Allocate(sizeofString("example")),
+                         });
+  }
+
+  SECTION("Arduino String") {
+    doc[0][String("example")] = 1;
+    doc[1][String("example")] = 2;
+
+    const char* key1 = doc[0].as<JsonObject>().begin()->key().c_str();
+    const char* key2 = doc[1].as<JsonObject>().begin()->key().c_str();
+    CHECK(key1 == key2);
+
+    REQUIRE(spy.log() == AllocatorLog{
+                             Allocate(sizeofPool()),
+                             Allocate(sizeofString("example")),
+                         });
+  }
+
+  SECTION("Flash string") {
+    doc[0][F("example")] = 1;
+    doc[1][F("example")] = 2;
+
+    const char* key1 = doc[0].as<JsonObject>().begin()->key().c_str();
+    const char* key2 = doc[1].as<JsonObject>().begin()->key().c_str();
+    CHECK(key1 == key2);
+
+    REQUIRE(spy.log() == AllocatorLog{
+                             Allocate(sizeofPool()),
+                             Allocate(sizeofString("example")),
+                         });
+  }
+}
+
+TEST_CASE("MemberProxy under memory constraints") {
+  KillswitchAllocator killswitch;
+  SpyingAllocator spy(&killswitch);
+  JsonDocument doc(&spy);
+
+  SECTION("key allocation fails") {
+    killswitch.on();
+
+    doc[std::string("hello")] = "world";
+
+    REQUIRE(doc.is<JsonObject>());
+    REQUIRE(doc.size() == 0);
+    REQUIRE(doc.overflowed() == true);
+    REQUIRE(spy.log() == AllocatorLog{
+                             AllocateFail(sizeofString("hello")),
+                         });
+  }
 }

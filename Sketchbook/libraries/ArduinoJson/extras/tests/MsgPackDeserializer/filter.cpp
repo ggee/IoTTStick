@@ -1,17 +1,22 @@
 // ArduinoJson - https://arduinojson.org
-// Copyright © 2014-2022, Benoit BLANCHON
+// Copyright © 2014-2024, Benoit BLANCHON
 // MIT License
 
 #include <ArduinoJson.h>
 #include <catch.hpp>
 
-using namespace ARDUINOJSON_NAMESPACE;
+#include <sstream>
+
+#include "Allocators.hpp"
+
+using namespace ArduinoJson::detail;
 
 TEST_CASE("deserializeMsgPack() filter") {
-  StaticJsonDocument<4096> doc;
+  SpyingAllocator spy;
+  JsonDocument doc(&spy);
   DeserializationError error;
 
-  StaticJsonDocument<200> filter;
+  JsonDocument filter;
   DeserializationOption::Filter filterOpt(filter);
 
   SECTION("root is fixmap") {
@@ -24,7 +29,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::IncompleteInput);
         CHECK(doc.as<std::string>() == "{}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(0));
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofStringBuffer()),
+                               Deallocate(sizeofStringBuffer()),
+                           });
       }
 
       SECTION("input truncated after inside skipped uint 8") {
@@ -33,7 +41,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::IncompleteInput);
         CHECK(doc.as<std::string>() == "{}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(0));
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofStringBuffer()),
+                               Deallocate(sizeofStringBuffer()),
+                           });
       }
 
       SECTION("input truncated after before skipped string size") {
@@ -41,7 +52,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::IncompleteInput);
         CHECK(doc.as<std::string>() == "{}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(0));
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofStringBuffer()),
+                               Deallocate(sizeofStringBuffer()),
+                           });
       }
 
       SECTION("input truncated after before skipped ext size") {
@@ -49,7 +63,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::IncompleteInput);
         CHECK(doc.as<std::string>() == "{}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(0));
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofStringBuffer()),
+                               Deallocate(sizeofStringBuffer()),
+                           });
       }
 
       SECTION("skip nil") {
@@ -58,7 +75,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("reject 0xc1") {
@@ -66,6 +89,10 @@ TEST_CASE("deserializeMsgPack() filter") {
                                    filterOpt);
 
         CHECK(error == DeserializationError::InvalidInput);
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofStringBuffer()),
+                               Deallocate(sizeofStringBuffer()),
+                           });
       }
 
       SECTION("skip false") {
@@ -74,7 +101,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip true") {
@@ -83,7 +116,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip positive fixint") {
@@ -92,7 +131,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip negative fixint") {
@@ -101,7 +146,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip uint 8") {
@@ -110,7 +161,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip int 8") {
@@ -119,7 +176,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip uint 16") {
@@ -128,7 +191,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip int 16") {
@@ -137,7 +206,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip uint 32") {
@@ -147,7 +222,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip int 32") {
@@ -157,7 +238,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip uint 64") {
@@ -168,7 +255,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip int 64") {
@@ -179,7 +272,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip float 32") {
@@ -189,7 +288,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip float 64") {
@@ -200,7 +305,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixstr") {
@@ -209,7 +320,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip str 8") {
@@ -218,7 +335,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip str 16") {
@@ -227,7 +350,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip str 32") {
@@ -237,7 +366,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip bin 8") {
@@ -246,7 +381,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip bin 16") {
@@ -255,7 +396,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip bin 32") {
@@ -265,7 +412,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixarray") {
@@ -274,7 +427,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip array 16") {
@@ -284,7 +443,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip array 32") {
@@ -297,7 +462,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixmap") {
@@ -307,7 +478,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip map 16") {
@@ -319,7 +496,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip map 32") {
@@ -333,7 +516,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixext 1") {
@@ -345,7 +534,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixext 2") {
@@ -357,7 +552,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixext 4") {
@@ -369,7 +570,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixext 8") {
@@ -381,7 +588,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip fixext 16") {
@@ -395,7 +608,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip ext 8") {
@@ -407,7 +626,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip ext 16") {
@@ -419,7 +644,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
 
       SECTION("skip ext 32") {
@@ -431,7 +662,13 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(1) + 8);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Allocate(sizeofPool()),
+                  Reallocate(sizeofPool(), sizeofObject(1)),
+              });
       }
     }
 
@@ -452,8 +689,18 @@ TEST_CASE("deserializeMsgPack() filter") {
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() ==
               "{\"onlyarr\":[{\"measure\":2},{\"measure\":4}],\"include\":42}");
-        CHECK(doc.memoryUsage() ==
-              JSON_ARRAY_SIZE(2) + 2 * JSON_OBJECT_SIZE(2) + 24);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2) + sizeofArray(2) +
+                                               2 * sizeofObject(1)),
+              });
       }
 
       SECTION("include array 16") {
@@ -468,8 +715,18 @@ TEST_CASE("deserializeMsgPack() filter") {
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() ==
               "{\"onlyarr\":[{\"measure\":2},{\"measure\":4}],\"include\":42}");
-        CHECK(doc.memoryUsage() ==
-              JSON_ARRAY_SIZE(2) + 2 * JSON_OBJECT_SIZE(2) + 24);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2) + sizeofArray(2) +
+                                               2 * sizeofObject(1)),
+              });
       }
 
       SECTION("include array 32") {
@@ -484,8 +741,18 @@ TEST_CASE("deserializeMsgPack() filter") {
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() ==
               "{\"onlyarr\":[{\"measure\":2},{\"measure\":4}],\"include\":42}");
-        CHECK(doc.memoryUsage() ==
-              JSON_ARRAY_SIZE(2) + 2 * JSON_OBJECT_SIZE(2) + 24);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2) + sizeofArray(2) +
+                                               2 * sizeofObject(1)),
+              });
       }
 
       SECTION("skip null") {
@@ -494,7 +761,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip false") {
@@ -503,7 +778,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip true") {
@@ -512,7 +795,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip positive fixint") {
@@ -521,7 +812,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip negative fixint") {
@@ -530,7 +829,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip uint 8") {
@@ -539,7 +846,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip uint 16") {
@@ -548,7 +863,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip uint 32") {
@@ -558,7 +881,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip uint 64") {
@@ -569,7 +900,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip int 8") {
@@ -578,7 +917,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip int 16") {
@@ -587,7 +934,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip int 32") {
@@ -597,7 +952,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip int 64") {
@@ -608,7 +971,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip float 32") {
@@ -618,7 +989,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip float 64") {
@@ -629,7 +1008,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip fixstr") {
@@ -638,7 +1025,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip str 8") {
@@ -660,7 +1055,15 @@ TEST_CASE("deserializeMsgPack() filter") {
             doc, "\x82\xA7onlyarr\xdb\x00\x00\x00\x05hello\xA7include\x2A",
             filterOpt);
 
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip fixmap") {
@@ -670,7 +1073,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip map 16") {
@@ -682,7 +1093,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
 
       SECTION("skip map 32") {
@@ -696,7 +1115,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "{\"onlyarr\":null,\"include\":42}");
-        CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+        CHECK(spy.log() ==
+              AllocatorLog{
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                  Allocate(sizeofPool()),
+                  Allocate(sizeofStringBuffer()),
+                  Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                  Reallocate(sizeofPool(), sizeofObject(2)),
+              });
       }
     }
   }
@@ -711,7 +1138,7 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "[]");
-        CHECK(doc.memoryUsage() == JSON_ARRAY_SIZE(0));
+        CHECK(spy.log() == AllocatorLog());
       }
     }
 
@@ -724,7 +1151,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 
         CHECK(error == DeserializationError::Ok);
         CHECK(doc.as<std::string>() == "[1,2,3]");
-        CHECK(doc.memoryUsage() == JSON_ARRAY_SIZE(3));
+        CHECK(spy.log() == AllocatorLog{
+                               Allocate(sizeofPool()),
+                               Reallocate(sizeofPool(), sizeofArray(3)),
+                           });
       }
     }
   }
@@ -745,8 +1175,17 @@ TEST_CASE("deserializeMsgPack() filter") {
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() ==
             "{\"onlyobj\":{\"measure\":2},\"include\":42}");
-      CHECK(doc.memoryUsage() ==
-            JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(1) + 24);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyobj")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2) + sizeofObject(1)),
+            });
     }
 
     SECTION("include map 16") {
@@ -759,8 +1198,17 @@ TEST_CASE("deserializeMsgPack() filter") {
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() ==
             "{\"onlyobj\":{\"measure\":2},\"include\":42}");
-      CHECK(doc.memoryUsage() ==
-            JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(1) + 24);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyobj")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2) + sizeofObject(1)),
+            });
     }
 
     SECTION("include map 32") {
@@ -774,8 +1222,17 @@ TEST_CASE("deserializeMsgPack() filter") {
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() ==
             "{\"onlyobj\":{\"measure\":2},\"include\":42}");
-      CHECK(doc.memoryUsage() ==
-            JSON_OBJECT_SIZE(2) + JSON_OBJECT_SIZE(1) + 24);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyobj")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("measure")),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2) + sizeofObject(1)),
+            });
     }
 
     SECTION("skip null") {
@@ -784,7 +1241,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip false") {
@@ -793,7 +1258,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip true") {
@@ -802,7 +1275,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip positive fixint") {
@@ -811,7 +1292,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip negative fixint") {
@@ -820,7 +1309,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip uint 8") {
@@ -829,7 +1326,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip uint 16") {
@@ -838,7 +1343,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip uint 32") {
@@ -847,7 +1360,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip uint 64") {
@@ -858,7 +1379,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip int 8") {
@@ -867,7 +1396,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip int 16") {
@@ -876,7 +1413,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip int 32") {
@@ -885,7 +1430,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip int 64") {
@@ -896,7 +1449,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip float 32") {
@@ -905,7 +1466,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip float 64") {
@@ -916,7 +1485,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip fixstr") {
@@ -925,7 +1502,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip str 8") {
@@ -947,7 +1532,15 @@ TEST_CASE("deserializeMsgPack() filter") {
           doc, "\x82\xA7onlyobj\xdb\x00\x00\x00\x05hello\xA7include\x2A",
           filterOpt);
 
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip fixarray") {
@@ -956,7 +1549,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip array 16") {
@@ -967,7 +1568,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
 
     SECTION("skip array 32") {
@@ -979,7 +1588,15 @@ TEST_CASE("deserializeMsgPack() filter") {
 
       CHECK(error == DeserializationError::Ok);
       CHECK(doc.as<std::string>() == "{\"onlyobj\":null,\"include\":42}");
-      CHECK(doc.memoryUsage() == JSON_OBJECT_SIZE(2) + 16);
+      CHECK(spy.log() ==
+            AllocatorLog{
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("onlyarr")),
+                Allocate(sizeofPool()),
+                Allocate(sizeofStringBuffer()),
+                Reallocate(sizeofStringBuffer(), sizeofString("include")),
+                Reallocate(sizeofPool(), sizeofObject(2)),
+            });
     }
   }
 
@@ -1030,10 +1647,10 @@ TEST_CASE("deserializeMsgPack() filter") {
 TEST_CASE("Zero-copy mode") {  // issue #1697
   char input[] = "\x82\xA7include\x01\xA6ignore\x02";
 
-  StaticJsonDocument<256> filter;
+  JsonDocument filter;
   filter["include"] = true;
 
-  StaticJsonDocument<256> doc;
+  JsonDocument doc;
   DeserializationError err =
       deserializeMsgPack(doc, input, 18, DeserializationOption::Filter(filter));
 
@@ -1042,8 +1659,8 @@ TEST_CASE("Zero-copy mode") {  // issue #1697
 }
 
 TEST_CASE("Overloads") {
-  StaticJsonDocument<256> doc;
-  StaticJsonDocument<256> filter;
+  JsonDocument doc;
+  JsonDocument filter;
 
   using namespace DeserializationOption;
 
