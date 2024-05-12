@@ -111,13 +111,8 @@ void updateHaValues()
 void publishHaDevice()
 {
   // Send HA initial data
-  if (enableHA)
-  {
-    Serial.println("Home Assistant Inegration on");
-    publishIpConfigToHa();
-    publishMacConfigToHa();
-    updateHaValues();
-  } else
-    Serial.println("Home Assistant Inegration off");
-
+  Serial.println("Home Assistant Inegration on");
+  publishIpConfigToHa();
+  publishMacConfigToHa();
+  updateHaValues();
 }
