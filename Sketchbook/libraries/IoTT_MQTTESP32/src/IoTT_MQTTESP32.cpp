@@ -438,12 +438,17 @@ bool MQTTESP32::sendMQTTMessage(lnReceiveBuffer txData)
 	return false; //changed from true
 }
 
-bool MQTTESP32::mqttPublish(char * topic, char * payload)
+bool MQTTESP32::mqttPublish(char * topic, char * payload, bool retain)
 {
     if (connected())
-        return publish(topic, payload);
+        return publish(topic, payload, retain);
     else
 		return false;
+}
+
+bool MQTTESP32::mqttPublish(char * topic, char * payload)
+{
+    return publish(topic, payload, false);
 }
 
 void MQTTESP32::processLoop()
