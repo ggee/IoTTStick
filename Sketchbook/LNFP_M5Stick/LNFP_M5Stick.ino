@@ -11,6 +11,7 @@
 //#define measurePerformance //uncomment this to display the number of loop cycles per second
 //#define useAI
 //#define useSecEl
+#define enableHA
 
 //Arduino published libraries. Install using the Arduino IDE or download from Github and install manually
 #include <Arduino.h>
@@ -1079,7 +1080,12 @@ void setup()
       wiThServer->startServer();
     if (lbServer)
       lbServer->startServer();
-      
+#ifdef enableHA
+    if(lnMQTTServer) {
+      lnMQTTServer->connectToBroker();
+      publishHaDevice();
+    }
+#endif
     Serial.println(String(ESP.getFreeHeap()));
   }
   randomSeed((uint32_t)ESP.getEfuseMac()); //initialize random generator with MAC

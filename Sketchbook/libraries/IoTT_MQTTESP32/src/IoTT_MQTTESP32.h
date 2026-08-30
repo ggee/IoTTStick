@@ -69,6 +69,7 @@ public:
 //	void setAppCallback(cbFct newCB);
 	void loadMQTTCfgJSON(DynamicJsonDocument doc);
     bool mqttPublish(char * topic, char * payload);
+    bool mqttPublish(char * topic, char * payload, bool retain);
 	topicList myTopics;
   
 //	char lnPingTopic[100] = "lnPing";  //ping topic, do not change. This is helpful to find Gateway IP Address if not known. 
